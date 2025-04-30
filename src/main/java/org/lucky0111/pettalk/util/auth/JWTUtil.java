@@ -105,4 +105,3 @@ public class JWTUtil {
     }
 }
 
-// 아니 왜 토큰 claim 값에 userId 추가했는데 로그인시 jwt에 안넣어줌?
