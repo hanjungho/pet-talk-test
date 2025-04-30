@@ -67,9 +67,10 @@ public class JWTFilter extends OncePerRequestFilter {
         String provider = jwtUtil.getProvider(token);
         String socialId = jwtUtil.getSocialId(token);
         String role = jwtUtil.getRole(token);
+        String userId = jwtUtil.getUserId(token);
 
         //userDTO를 생성하여 값 set
-        UserDTO userDTO = new UserDTO(role, null, provider, socialId);
+        UserDTO userDTO = new UserDTO(role, null, provider, socialId, userId);
 
         //UserDetails에 회원 정보 객체 담기
         CustomOAuth2User customOAuth2User = new CustomOAuth2User(userDTO);

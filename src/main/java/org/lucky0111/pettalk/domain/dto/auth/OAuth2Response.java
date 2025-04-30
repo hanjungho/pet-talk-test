@@ -2,7 +2,7 @@ package org.lucky0111.pettalk.domain.dto.auth;
 
 public interface OAuth2Response {
 
-    //제공자 (Ex. naver, google, ...)
+    //제공자 (Ex. naver, kakao, ...)
     String getProvider();
     //제공자에서 발급해주는 아이디(번호)
     String getProviderId();

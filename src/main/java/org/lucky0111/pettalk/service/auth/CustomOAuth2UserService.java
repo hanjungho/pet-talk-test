@@ -59,7 +59,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
             userRepository.save(petUser);
 
-            UserDTO userDTO = new UserDTO("ROLE_USER", oAuth2Response.getName(), provider, socialId);
+            UserDTO userDTO = new UserDTO("ROLE_USER", oAuth2Response.getName(), provider, socialId, petUser.getUserId());
 
             return new CustomOAuth2User(userDTO);
         }
@@ -70,7 +70,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
             userRepository.save(existData);
 
-            UserDTO userDTO = new UserDTO(existData.getRole(), oAuth2Response.getName(), existData.getProvider(), existData.getSocialId());
+            UserDTO userDTO = new UserDTO(existData.getRole(), oAuth2Response.getName(), existData.getProvider(), existData.getSocialId(), existData.getUserId());
 
             return new CustomOAuth2User(userDTO);
         }
