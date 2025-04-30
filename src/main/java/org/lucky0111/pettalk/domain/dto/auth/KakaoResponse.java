@@ -10,8 +10,10 @@ public class KakaoResponse implements OAuth2Response {
 
     public KakaoResponse(Map<String, Object> attributes) {
         this.attributes = attributes;
-        this.properties = (Map<String, Object>) attributes.get("properties");
-        this.kakao_account = (Map<String, Object>) attributes.get("kakao_account");
+        this.properties = attributes.containsKey("properties") ?
+                (Map<String, Object>) attributes.get("properties") : null;
+        this.kakao_account = attributes.containsKey("kakao_account") ?
+                (Map<String, Object>) attributes.get("kakao_account") : null;
     }
 
     @Override
@@ -35,6 +37,7 @@ public class KakaoResponse implements OAuth2Response {
     public String getName() {
         // properties에서 nickname 정보를 가져옵니다
         return (properties != null && properties.containsKey("nickname")) ?
-                properties.get("nickname").toString() : null;
+                properties.get("nickname").toString() :
+                "KakaoUser_" + getProviderId().substring(0, 6);
     }
 }
