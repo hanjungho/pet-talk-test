@@ -1,5 +1,6 @@
 package org.lucky0111.pettalk.util.auth;
 
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import jakarta.transaction.Transactional;
 import org.lucky0111.pettalk.domain.dto.auth.OAuthTempTokenDTO;
@@ -77,6 +78,23 @@ public class JWTUtil {
         }
     }
 
+    // 토큰의 남은 만료 시간을 초 단위로 반환하는 새로운 메서드
+    public long getExpiresIn(String token) {
+        try {
+            Claims claims = Jwts.parser().verifyWith(secretKey).build()
+                    .parseSignedClaims(token).getPayload();
+
+            Date expiration = claims.getExpiration();
+            Date now = new Date();
+
+            // 만료 시간과 현재 시간의 차이를 초 단위로 계산
+            long diff = expiration.getTime() - now.getTime();
+            return Math.max(0, diff / 1000); // 음수가 되지 않도록 최소값 0 설정
+        } catch (Exception e) {
+            return 0; // 오류 발생 시 만료된 것으로 처리
+        }
+    }
+
     public String createJwt(String provider, String socialId, String userId, String role, Long expiredMs) {
         System.out.println("JWT 토큰 생성 - 사용자: " + provider + " " + socialId + ", 역할: " + role);
         try {
@@ -85,6 +103,28 @@ public class JWTUtil {
                     .claim("socialId", socialId)
                     .claim("userId", userId)
                     .claim("role", role)
+                    .issuedAt(new Date(System.currentTimeMillis()))
+                    .expiration(new Date(System.currentTimeMillis() + expiredMs))
+                    .signWith(secretKey)
+                    .compact();
+            System.out.println("JWT 토큰 생성 성공: " + token.substring(0, Math.min(token.length(), 10)) + "...");
+            return token;
+        } catch (Exception e) {
+            System.out.println("JWT 토큰 생성 중 오류 발생: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public String createJwtWithEmail(String provider, String socialId, String userId, String role, String email, Long expiredMs) {
+        System.out.println("JWT 토큰 생성 - 사용자: " + provider + " " + socialId + ", 역할: " + role + ", 이메일: " + email);
+        try {
+            String token = Jwts.builder()
+                    .claim("provider", provider)
+                    .claim("socialId", socialId)
+                    .claim("userId", userId)
+                    .claim("role", role)
+                    .claim("email", email)
                     .issuedAt(new Date(System.currentTimeMillis()))
                     .expiration(new Date(System.currentTimeMillis() + expiredMs))
                     .signWith(secretKey)
@@ -168,12 +208,23 @@ public class JWTUtil {
     // Generate both access and refresh tokens
     @Transactional
     public TokenDTO generateTokenPair(PetUser user) {
-        String accessToken = createJwt(
-                user.getProvider(),
-                user.getSocialId(),
-                user.getUserId(),
-                user.getRole(),
-                accessTokenExpirationMs);
+        String accessToken;
+        if (user.getEmail() != null) {
+            accessToken = createJwtWithEmail(
+                    user.getProvider(),
+                    user.getSocialId(),
+                    user.getUserId(),
+                    user.getRole(),
+                    user.getEmail(),
+                    accessTokenExpirationMs);
+        } else {
+            accessToken = createJwt(
+                    user.getProvider(),
+                    user.getSocialId(),
+                    user.getUserId(),
+                    user.getRole(),
+                    accessTokenExpirationMs);
+        }
 
         String refreshToken = generateRefreshToken(user);
 
@@ -188,13 +239,24 @@ public class JWTUtil {
                 .map(token -> {
                     PetUser user = token.getUser();
 
-                    // Create new access token
-                    String newAccessToken = createJwt(
-                            user.getProvider(),
-                            user.getSocialId(),
-                            user.getUserId(),
-                            user.getRole(),
-                            accessTokenExpirationMs);
+                    // Create new access token with email
+                    String newAccessToken;
+                    if (user.getEmail() != null) {
+                        newAccessToken = createJwtWithEmail(
+                                user.getProvider(),
+                                user.getSocialId(),
+                                user.getUserId(),
+                                user.getRole(),
+                                user.getEmail(),
+                                accessTokenExpirationMs);
+                    } else {
+                        newAccessToken = createJwt(
+                                user.getProvider(),
+                                user.getSocialId(),
+                                user.getUserId(),
+                                user.getRole(),
+                                accessTokenExpirationMs);
+                    }
 
                     // Return tokens
                     return new TokenDTO(newAccessToken, refreshToken, accessTokenExpirationMs / 1000);

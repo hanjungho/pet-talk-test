@@ -87,7 +87,7 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
                 TokenDTO tokens = jwtUtil.generateTokenPair(existingUser);
 
                 // 토큰을 헤더와 쿠키에 설정
-                response.setHeader("Authorization", "Bearer " + tokens.getAccessToken());
+                response.setHeader("access", tokens.getAccessToken());
                 response.addCookie(createRefreshTokenCookie(tokens.getRefreshToken()));
 
                 // 프론트엔드로 리다이렉트 (토큰 정보 없이)

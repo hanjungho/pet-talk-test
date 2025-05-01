@@ -60,32 +60,35 @@ public class SecurityConfig {
                     }
                 }))
 
-        //csrf disable
+                //csrf disable
                 .csrf((auth) -> auth.disable())
 
-        //From 로그인 방식 disable
+                //From 로그인 방식 disable
                 .formLogin((auth) -> auth.disable())
 
-        //HTTP Basic 인증 방식 disable
+                //HTTP Basic 인증 방식 disable
                 .httpBasic((auth) -> auth.disable())
 
-        //JWTFilter 추가
+                //JWTFilter 추가
                 .addFilterBefore(new JWTFilter(jwtUtil), UsernamePasswordAuthenticationFilter.class)
 
-        //oauth2
+                //oauth2
                 .oauth2Login((oauth2) -> oauth2
                         .userInfoEndpoint((userInfoEndpointConfig) -> userInfoEndpointConfig
                                 .userService(customOAuth2UserService))
                         .successHandler(customSuccessHandler)
                 )
 
-        //경로별 인가 작업
+                //경로별 인가 작업
                 .authorizeHttpRequests((auth) -> auth
-                        .requestMatchers("/swagger-ui/**","/v3/api-docs/**", "/api/v1/**", "/").permitAll()
-                        .requestMatchers("/my").hasRole("USER")
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/api/v1/auth/register",
+                                "/api/v1/auth/check-nickname", "/api/v1/auth/refresh", "/").permitAll()
+                        .requestMatchers("/api/v1/auth/user-info", "/api/v1/auth/logout",
+                                "/api/v1/auth/withdraw", "/api/v1/auth/profile",
+                                "/api/v1/auth/token/validate", "/my").authenticated()
                         .anyRequest().authenticated())
 
-        //세션 설정 : STATELESS
+                //세션 설정 : STATELESS
                 .sessionManagement((session) -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
