@@ -14,65 +14,82 @@ import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Service
 public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
     private final UserRepository userRepository;
 
     public CustomOAuth2UserService(UserRepository userRepository) {
-
         this.userRepository = userRepository;
     }
 
     @Override
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
+        try {
+            OAuth2User oAuth2User = super.loadUser(userRequest);
+            System.out.println("OAuth2 로그인 사용자 정보: " + oAuth2User);
 
-        OAuth2User oAuth2User = super.loadUser(userRequest);
-        System.out.println(oAuth2User);
+            String registrationId = userRequest.getClientRegistration().getRegistrationId();
+            OAuth2Response oAuth2Response = null;
 
-        String registrationId = userRequest.getClientRegistration().getRegistrationId();
-        OAuth2Response oAuth2Response = null;
-        if (registrationId.equals("naver")) {
+            // 안전하게 속성 복사
+            Map<String, Object> attributes = new HashMap<>(oAuth2User.getAttributes());
 
-            oAuth2Response = new NaverResponse(oAuth2User.getAttributes());
-        }
-        else if (registrationId.equals("kakao")) {
+            if (registrationId.equals("naver")) {
+                oAuth2Response = new NaverResponse(attributes);
+                System.out.println("네이버 로그인 처리");
+            }
+            else if (registrationId.equals("kakao")) {
+                oAuth2Response = new KakaoResponse(attributes);
+                System.out.println("카카오 로그인 처리");
+            }
+            else {
+                System.out.println("지원하지 않는 OAuth2 제공자: " + registrationId);
+                throw new OAuth2AuthenticationException("지원하지 않는 OAuth2 제공자입니다.");
+            }
 
-            oAuth2Response = new KakaoResponse(oAuth2User.getAttributes());
-        }
-        else {
+            // OAuth2 응답 정보 확인
+            if (oAuth2Response == null) {
+                System.out.println("OAuth2 응답 생성 실패");
+                throw new OAuth2AuthenticationException("OAuth2 응답 정보를 가져올 수 없습니다.");
+            }
 
-            return null;
-        }
-        String provider = oAuth2Response.getProvider();
-        String socialId = oAuth2Response.getProviderId();
-        PetUser existData = userRepository.findByProviderAndSocialId(provider, socialId);
+            String provider = oAuth2Response.getProvider();
+            String socialId = oAuth2Response.getProviderId();
+            String email = oAuth2Response.getEmail();
+            String name = oAuth2Response.getName();
 
-        if (existData == null) {
+            System.out.println("OAuth2 사용자 정보: provider=" + provider +
+                    ", socialId=" + socialId + ", email=" + email + ", name=" + name);
 
-            PetUser petUser = new PetUser();
-            petUser.setProvider(provider);
-            petUser.setSocialId(socialId);
-            petUser.setEmail(oAuth2Response.getEmail());
-            petUser.setName(oAuth2Response.getName());
-            petUser.setRole("ROLE_USER");
+            if (provider == null || socialId == null) {
+                System.out.println("필수 정보 누락");
+                throw new OAuth2AuthenticationException("OAuth2 응답에 필수 정보가 누락되었습니다.");
+            }
 
-            userRepository.save(petUser);
+            PetUser existData = userRepository.findByProviderAndSocialId(provider, socialId);
 
-            UserDTO userDTO = new UserDTO("ROLE_USER", oAuth2Response.getName(), provider, socialId, petUser.getUserId());
+            UserDTO userDTO;
 
+            if (existData == null) {
+                System.out.println("신규 사용자 - 첫 로그인");
+                userDTO = new UserDTO("ROLE_USER", name, provider, socialId, null);
+            }
+            else {
+                System.out.println("기존 사용자 정보: " + existData.getUserId() + ", " + existData.getRole());
+                userDTO = new UserDTO(existData.getRole(), existData.getName(), provider, socialId, existData.getUserId());
+            }
+
+            // 새 CustomOAuth2User 생성자를 사용하여 속성 복사
             return new CustomOAuth2User(userDTO);
-        }
-        else {
 
-            existData.setEmail(oAuth2Response.getEmail());
-            existData.setName(oAuth2Response.getName());
-
-            userRepository.save(existData);
-
-            UserDTO userDTO = new UserDTO(existData.getRole(), oAuth2Response.getName(), existData.getProvider(), existData.getSocialId(), existData.getUserId());
-
-            return new CustomOAuth2User(userDTO);
+        } catch (Exception e) {
+            System.err.println("OAuth2 사용자 로드 중 오류 발생: " + e.getMessage());
+            e.printStackTrace();
+            throw new OAuth2AuthenticationException("OAuth2 인증 처리 중 오류가 발생했습니다.");
         }
     }
 }
