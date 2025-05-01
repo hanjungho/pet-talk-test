@@ -76,15 +76,15 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
             if (existData == null) {
                 System.out.println("신규 사용자 - 첫 로그인");
-                userDTO = new UserDTO("ROLE_USER", name, provider, socialId, null);
+                userDTO = new UserDTO("ROLE_USER", name, provider, socialId, null, email);
             }
             else {
                 System.out.println("기존 사용자 정보: " + existData.getUserId() + ", " + existData.getRole());
-                userDTO = new UserDTO(existData.getRole(), existData.getName(), provider, socialId, existData.getUserId());
+                userDTO = new UserDTO(existData.getRole(), existData.getName(), provider, socialId, existData.getUserId(), existData.getEmail());
             }
 
-            // 새 CustomOAuth2User 생성자를 사용하여 속성 복사
-            return new CustomOAuth2User(userDTO);
+            // 이메일 정보를 포함하여 CustomOAuth2User 생성
+            return new CustomOAuth2User(userDTO, attributes);
 
         } catch (Exception e) {
             System.err.println("OAuth2 사용자 로드 중 오류 발생: " + e.getMessage());

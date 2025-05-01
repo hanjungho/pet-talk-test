@@ -7,6 +7,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.lucky0111.pettalk.domain.dto.auth.CustomOAuth2User;
 import org.lucky0111.pettalk.domain.dto.auth.OAuth2Response;
+import org.lucky0111.pettalk.domain.dto.auth.TokenDTO;
+import org.lucky0111.pettalk.domain.entity.PetUser;
+import org.lucky0111.pettalk.repository.user.UserRepository;
 import org.lucky0111.pettalk.util.auth.JWTUtil;
 import org.lucky0111.pettalk.util.auth.OAuth2UserServiceHelper;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,13 +31,21 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
     private final JWTUtil jwtUtil;
     private final OAuth2UserServiceHelper oAuth2UserServiceHelper;
+    private final UserRepository userRepository;
 
     @Value("${front.url}")
     private String frontUrl;
 
-    public CustomSuccessHandler(JWTUtil jwtUtil, OAuth2UserServiceHelper oAuth2UserServiceHelper) {
+    @Value("${cookie.domain:localhost}")
+    private String cookieDomain;
+
+    @Value("${refresh.token.cookie.expiry:2592000}") // 30일(초)
+    private int refreshTokenCookieExpiry;
+
+    public CustomSuccessHandler(JWTUtil jwtUtil, OAuth2UserServiceHelper oAuth2UserServiceHelper, UserRepository userRepository) {
         this.jwtUtil = jwtUtil;
         this.oAuth2UserServiceHelper = oAuth2UserServiceHelper;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -57,12 +68,34 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
             provider = customUser.getProvider();
             providerId = customUser.getSocialId();
-            email = customUser.getAttributes().containsKey("email") ?
-                    (String) customUser.getAttributes().get("email") : null;
+            email = customUser.getEmail(); // getEmail() 메서드 사용
+            if (email == null) {
+                // attributes에서 이메일 검색 시도
+                if (customUser.getAttributes().containsKey("email")) {
+                    email = (String) customUser.getAttributes().get("email");
+                }
+            }
             name = customUser.getName();
 
             System.out.println("CustomOAuth2User에서 정보 추출: provider=" + provider +
                     ", providerId=" + providerId + ", email=" + email + ", name=" + name);
+
+            // 이미 가입한 사용자인 경우 바로 로그인
+            PetUser existingUser = userRepository.findByProviderAndSocialId(provider, providerId);
+            if (existingUser != null && existingUser.getNickname() != null) {
+                // 토큰 생성
+                TokenDTO tokens = jwtUtil.generateTokenPair(existingUser);
+
+                // 토큰을 헤더와 쿠키에 설정
+                response.setHeader("Authorization", "Bearer " + tokens.getAccessToken());
+                response.addCookie(createRefreshTokenCookie(tokens.getRefreshToken()));
+
+                // 프론트엔드로 리다이렉트 (토큰 정보 없이)
+                String targetUrl = frontUrl + "/oauth/callback";
+
+                response.sendRedirect(targetUrl);
+                return;
+            }
         }
         // 일반 OAuth2User인 경우 - OAuth2UserServiceHelper 사용
         else {
@@ -87,6 +120,23 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
                     ", id=" + providerId +
                     ", email=" + email +
                     ", name=" + name);
+
+            // 이미 가입한 사용자인 경우 바로 로그인
+            PetUser existingUser = userRepository.findByProviderAndSocialId(provider, providerId);
+            if (existingUser != null && existingUser.getNickname() != null) {
+                // 토큰 생성
+                TokenDTO tokens = jwtUtil.generateTokenPair(existingUser);
+
+                // 토큰을 헤더와 쿠키에 설정
+                response.setHeader("Authorization", "Bearer " + tokens.getAccessToken());
+                response.addCookie(createRefreshTokenCookie(tokens.getRefreshToken()));
+
+                // 프론트엔드로 리다이렉트 (토큰 정보 없이)
+                String targetUrl = frontUrl + "/oauth/callback";
+
+                response.sendRedirect(targetUrl);
+                return;
+            }
         }
 
         // provider나 providerId가 null이면 오류 반환
@@ -96,7 +146,7 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
             return;
         }
 
-        // 임시 토큰 생성
+        // 임시 토큰 생성 (새 사용자 또는 추가 정보가 필요한 사용자)
         String tempToken = jwtUtil.createTempToken(
                 provider,
                 providerId,
@@ -105,9 +155,27 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
                 30 * 60 * 1000L // 30분
         );
 
-        // 프론트엔드로 리다이렉트 (임시 토큰 포함)
+        // 프론트엔드로 리다이렉트 (임시 토큰 포함 - 이 경우에는 URL에 토큰 필요)
         String targetUrl = frontUrl + "/register?token=" + tempToken;
         System.out.println("리다이렉트 주소: " + targetUrl);
         response.sendRedirect(targetUrl);
+    }
+
+    // HTTP-Only 쿠키 생성 메서드
+    private Cookie createRefreshTokenCookie(String refreshToken) {
+        Cookie refreshTokenCookie = new Cookie("refresh_token", refreshToken);
+        refreshTokenCookie.setHttpOnly(true);
+        refreshTokenCookie.setSecure(true); // HTTPS에서만 전송
+        refreshTokenCookie.setPath("/");
+
+        // 쿠키 도메인 설정 (localhost가 아닌 경우)
+        if (!"localhost".equals(cookieDomain)) {
+            refreshTokenCookie.setDomain(cookieDomain);
+        }
+
+        // 쿠키 만료 시간 설정 (초 단위)
+        refreshTokenCookie.setMaxAge(refreshTokenCookieExpiry);
+
+        return refreshTokenCookie;
     }
 }

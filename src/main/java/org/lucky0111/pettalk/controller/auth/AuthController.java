@@ -1,6 +1,9 @@
 package org.lucky0111.pettalk.controller.auth;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.lucky0111.pettalk.domain.dto.auth.OAuthTempTokenDTO;
+import org.lucky0111.pettalk.domain.dto.auth.TokenDTO;
+import org.lucky0111.pettalk.domain.dto.auth.TokenRequest;
 import org.lucky0111.pettalk.domain.dto.auth.UserRegistrationDTO;
 import org.lucky0111.pettalk.domain.entity.PetUser;
 import org.lucky0111.pettalk.repository.user.UserRepository;
@@ -9,11 +12,14 @@ import org.lucky0111.pettalk.util.auth.JWTUtil;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -28,6 +34,56 @@ public class AuthController {
         this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
         this.responseService = responseService;
+    }
+
+    @GetMapping("/user-info")
+    public ResponseEntity<?> getUserInfo(HttpServletRequest request) {
+        try {
+            // 현재 인증된 사용자 정보 가져오기
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return responseService.createErrorResponse("UNAUTHORIZED", "인증 정보가 없습니다.");
+            }
+
+            // JWT 토큰에서 사용자 ID 추출
+            String userId = jwtUtil.getUserId(extractJwtToken(request));
+
+            if (userId == null) {
+                return responseService.createErrorResponse("INVALID_TOKEN", "유효하지 않은 토큰입니다.");
+            }
+
+            // 사용자 정보 조회
+            PetUser user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
+
+            // 응답 데이터 생성
+            Map<String, Object> userData = new HashMap<>();
+            userData.put("id", user.getUserId());
+            userData.put("email", user.getEmail());
+            userData.put("name", user.getName());
+            userData.put("nickname", user.getNickname());
+            userData.put("profileImageUrl", user.getProfileImageUrl());
+            userData.put("role", user.getRole());
+
+            return responseService.createSuccessResponse(userData, "사용자 정보를 성공적으로 가져왔습니다.");
+
+        } catch (ResponseStatusException e) {
+            return responseService.createErrorResponse("NOT_FOUND", e.getReason());
+        } catch (Exception e) {
+            System.err.println("사용자 정보 조회 중 오류 발생: " + e.getMessage());
+            e.printStackTrace();
+            return responseService.createErrorResponse("SERVER_ERROR", "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+        }
+    }
+
+    // JWT 토큰 추출 헬퍼 메서드
+    private String extractJwtToken(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
     }
 
     @PostMapping("/register")
@@ -70,19 +126,14 @@ public class AuthController {
 
             userRepository.save(petUser);
 
-            // JWT 토큰 발급
-            String accessToken = jwtUtil.createJwt(
-                    tempTokenInfo.getProvider(),
-                    tempTokenInfo.getProviderId(),
-                    petUser.getUserId(),
-                    "ROLE_USER",
-                    60 * 60 * 1000L // 1시간
-            );
+            // Generate JWT token pair (access + refresh)
+            TokenDTO tokens = jwtUtil.generateTokenPair(petUser);
 
             // 응답 데이터 생성
             Map<String, Object> responseData = new HashMap<>();
-            responseData.put("accessToken", accessToken);
-            responseData.put("expiresIn", 3600);
+            responseData.put("accessToken", tokens.getAccessToken());
+            responseData.put("refreshToken", tokens.getRefreshToken());
+            responseData.put("expiresIn", tokens.getExpiresIn());
 
             Map<String, Object> userData = new HashMap<>();
             userData.put("id", petUser.getUserId());
@@ -121,6 +172,57 @@ public class AuthController {
                     isAvailable ? "사용 가능한 닉네임입니다." : "이미 사용 중인 닉네임입니다.");
         } catch (Exception e) {
             System.err.println("닉네임 확인 중 오류 발생: " + e.getMessage());
+            return responseService.createErrorResponse("SERVER_ERROR", "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+        }
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refreshToken(@RequestBody TokenRequest request) {
+        try {
+            String refreshToken = request.getRefreshToken();
+
+            if (refreshToken == null || refreshToken.isBlank()) {
+                return responseService.createErrorResponse("INVALID_REQUEST", "리프레시 토큰이 필요합니다.");
+            }
+
+            Optional<TokenDTO> optionalTokenDTO = jwtUtil.refreshAccessToken(refreshToken);
+
+            if (optionalTokenDTO.isPresent()) {
+                TokenDTO tokenDTO = optionalTokenDTO.get();
+                Map<String, Object> responseData = new HashMap<>();
+                responseData.put("accessToken", tokenDTO.getAccessToken());
+                responseData.put("refreshToken", tokenDTO.getRefreshToken());
+                responseData.put("expiresIn", tokenDTO.getExpiresIn());
+
+                return responseService.createSuccessResponse(responseData, "토큰이 갱신되었습니다.");
+            } else {
+                return responseService.createErrorResponse("INVALID_TOKEN", "유효하지 않은 리프레시 토큰입니다.");
+            }
+        } catch (Exception e) {
+            System.err.println("토큰 갱신 중 오류 발생: " + e.getMessage());
+            e.printStackTrace();
+            return responseService.createErrorResponse("SERVER_ERROR", "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+        }
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@RequestBody TokenRequest request) {
+        try {
+            String refreshToken = request.getRefreshToken();
+
+            if (refreshToken == null || refreshToken.isBlank()) {
+                return responseService.createErrorResponse("INVALID_REQUEST", "리프레시 토큰이 필요합니다.");
+            }
+
+            boolean revoked = jwtUtil.revokeRefreshToken(refreshToken);
+
+            if (revoked) {
+                return responseService.createSuccessResponse(null, "로그아웃되었습니다.");
+            } else {
+                return responseService.createErrorResponse("INVALID_TOKEN", "유효하지 않은 리프레시 토큰입니다.");
+            }
+        } catch (Exception e) {
+            System.err.println("로그아웃 중 오류 발생: " + e.getMessage());
             return responseService.createErrorResponse("SERVER_ERROR", "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
         }
     }

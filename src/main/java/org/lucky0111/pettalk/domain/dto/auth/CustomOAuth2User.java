@@ -25,6 +25,7 @@ public class CustomOAuth2User implements OAuth2User {
         attributes.put("socialId", userDTO.socialId());
         attributes.put("name", userDTO.name());
         attributes.put("userId", userDTO.userId());
+        attributes.put("email", userDTO.email());
     }
 
     public CustomOAuth2User(UserDTO userDTO, Map<String, Object> originalAttributes) {
@@ -50,6 +51,9 @@ public class CustomOAuth2User implements OAuth2User {
         }
         if (!this.attributes.containsKey("userId")) {
             this.attributes.put("userId", userDTO.userId());
+        }
+        if (!this.attributes.containsKey("email")) {
+            this.attributes.put("email", userDTO.email());
         }
     }
 
@@ -80,5 +84,9 @@ public class CustomOAuth2User implements OAuth2User {
 
     public String getUserId() {
         return userDTO.userId();
+    }
+
+    public String getEmail() {
+        return userDTO.email();
     }
 }

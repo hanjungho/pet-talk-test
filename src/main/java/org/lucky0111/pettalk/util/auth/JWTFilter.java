@@ -20,30 +20,27 @@ public class JWTFilter extends OncePerRequestFilter {
     private final JWTUtil jwtUtil;
 
     public JWTFilter(JWTUtil jwtUtil) {
-
         this.jwtUtil = jwtUtil;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-
-        String authorization = null;
-        Cookie[] cookies = request.getCookies();
-
-        if (cookies != null) {
-
-            for (Cookie cookie : cookies) {
-
-                if (cookie.getName().equals("Authorization")) {
-
-                    authorization = cookie.getValue();
-                }
-            }
+        // Skip filter for refresh token endpoint and other public endpoints
+        String path = request.getRequestURI();
+        if (path.equals("/api/v1/auth/refresh") ||
+                path.equals("/api/v1/auth/check-nickname") ||
+                path.equals("/api/v1/auth/register") ||
+                path.equals("/") ||
+                path.matches("/swagger-ui/.*") ||
+                path.matches("/v3/api-docs/.*")) {
+            filterChain.doFilter(request, response);
+            return;
         }
+
+        String authorization = extractToken(request);
 
         //Authorization 헤더 검증
         if (authorization == null) {
-
             System.out.println("token null");
             filterChain.doFilter(request, response);
 
@@ -55,11 +52,9 @@ public class JWTFilter extends OncePerRequestFilter {
         String token = authorization;
 
         if (jwtUtil.isExpired(token)) {
-
             System.out.println("token expired");
-            filterChain.doFilter(request, response);
-
-            //조건이 해당되면 메소드 종료 (필수)
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.getWriter().write("{\"error\":\"Access token expired\",\"code\":\"TOKEN_EXPIRED\"}");
             return;
         }
 
@@ -68,9 +63,10 @@ public class JWTFilter extends OncePerRequestFilter {
         String socialId = jwtUtil.getSocialId(token);
         String role = jwtUtil.getRole(token);
         String userId = jwtUtil.getUserId(token);
+        String email = jwtUtil.getEmail(token);
 
         //userDTO를 생성하여 값 set
-        UserDTO userDTO = new UserDTO(role, null, provider, socialId, userId);
+        UserDTO userDTO = new UserDTO(role, null, provider, socialId, userId, email);
 
         //UserDetails에 회원 정보 객체 담기
         CustomOAuth2User customOAuth2User = new CustomOAuth2User(userDTO);
@@ -81,5 +77,25 @@ public class JWTFilter extends OncePerRequestFilter {
         SecurityContextHolder.getContext().setAuthentication(authToken);
 
         filterChain.doFilter(request, response);
+    }
+
+    private String extractToken(HttpServletRequest request) {
+        // Try to get token from Authorization header first
+        String bearerToken = request.getHeader("Authorization");
+        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+
+        // If not in header, check cookies
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                if (cookie.getName().equals("Authorization")) {
+                    return cookie.getValue();
+                }
+            }
+        }
+
+        return null;
     }
 }
