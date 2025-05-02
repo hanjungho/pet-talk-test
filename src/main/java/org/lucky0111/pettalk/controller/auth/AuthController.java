@@ -1,5 +1,6 @@
 package org.lucky0111.pettalk.controller.auth;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.servlet.http.HttpServletRequest;
 import org.lucky0111.pettalk.domain.dto.auth.OAuthTempTokenDTO;
 import org.lucky0111.pettalk.domain.dto.auth.TokenDTO;
@@ -26,7 +27,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/auth")
-@CrossOrigin(origins = {"${front.url}", "http://localhost:3000"}, maxAge = 3600, allowCredentials = "true")
+@SecurityRequirement(name = "bearerAuth")
 public class AuthController {
 
     private final JWTUtil jwtUtil;

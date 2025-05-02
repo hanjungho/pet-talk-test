@@ -3,7 +3,7 @@ package org.lucky0111.pettalk.util.auth;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.Cookie;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.lucky0111.pettalk.domain.dto.auth.CustomOAuth2User;
@@ -107,16 +107,6 @@ public class JWTFilter extends OncePerRequestFilter {
         String bearerToken = request.getHeader("Authorization");
         if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
-        }
-
-        // If not in header, check cookies
-        Cookie[] cookies = request.getCookies();
-        if (cookies != null) {
-            for (Cookie cookie : cookies) {
-                if (cookie.getName().equals("Authorization")) {
-                    return cookie.getValue();
-                }
-            }
         }
 
         return null;

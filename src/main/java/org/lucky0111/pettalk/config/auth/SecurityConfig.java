@@ -16,6 +16,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.Collections;
 
 @Configuration
@@ -30,7 +31,6 @@ public class SecurityConfig {
     private String fronturl;
 
     public SecurityConfig(CustomOAuth2UserService customOAuth2UserService, CustomSuccessHandler customSuccessHandler, JWTUtil jwtUtil) {
-
         this.customOAuth2UserService = customOAuth2UserService;
         this.customSuccessHandler = customSuccessHandler;
         this.jwtUtil = jwtUtil;
@@ -41,54 +41,75 @@ public class SecurityConfig {
 
         http
                 .cors(corsCustomizer -> corsCustomizer.configurationSource(new CorsConfigurationSource() {
-
                     @Override
                     public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
-
                         CorsConfiguration configuration = new CorsConfiguration();
 
-                        configuration.setAllowedOrigins(Collections.singletonList(fronturl));
-                        configuration.setAllowedMethods(Collections.singletonList("*"));
-                        configuration.setAllowCredentials(true);
-                        configuration.setAllowedHeaders(Collections.singletonList("*"));
-                        configuration.setMaxAge(3600L);
+                        // 개발 환경을 위해 모든 오리진 허용 (프로덕션에서는 변경 필요)
+                        configuration.addAllowedOrigin("*");
 
-                        configuration.setExposedHeaders(Collections.singletonList("Set-Cookie"));
-                        configuration.setExposedHeaders(Collections.singletonList("Authorization"));
+                        // 또는 특정 오리진만 허용하려면 아래 코드 사용
+                        // List<String> allowedOrigins = Arrays.asList(fronturl, "http://localhost:8443");
+                        // configuration.setAllowedOrigins(allowedOrigins);
+
+                        // 모든 HTTP 메서드 허용
+                        configuration.setAllowedMethods(
+                                Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
+                        );
+
+                        // 모든 오리진을 허용할 때는 credentials를 false로 설정
+                        configuration.setAllowCredentials(false);
+
+                        // 특정 오리진만 허용할 때는 credentials를 true로 설정 가능
+                        // configuration.setAllowCredentials(true);
+
+                        // 허용할 헤더 설정
+                        configuration.setAllowedHeaders(
+                                Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With")
+                        );
+
+                        // 브라우저에 노출할 헤더 설정
+                        configuration.setExposedHeaders(
+                                Arrays.asList("Authorization", "Set-Cookie")
+                        );
+
+                        // preflight 요청 캐시 시간 설정 (초 단위)
+                        configuration.setMaxAge(3600L);
 
                         return configuration;
                     }
                 }))
 
-                //csrf disable
+                // CSRF 보호 비활성화
                 .csrf((auth) -> auth.disable())
 
-                //From 로그인 방식 disable
+                // 폼 로그인 방식 비활성화
                 .formLogin((auth) -> auth.disable())
 
-                //HTTP Basic 인증 방식 disable
+                // HTTP Basic 인증 방식 비활성화
                 .httpBasic((auth) -> auth.disable())
 
-                //JWTFilter 추가
+                // JWT 필터 추가
                 .addFilterBefore(new JWTFilter(jwtUtil), UsernamePasswordAuthenticationFilter.class)
 
-                //oauth2
+                // OAuth2 로그인 설정
                 .oauth2Login((oauth2) -> oauth2
                         .userInfoEndpoint((userInfoEndpointConfig) -> userInfoEndpointConfig
                                 .userService(customOAuth2UserService))
                         .successHandler(customSuccessHandler)
                 )
 
-                //경로별 인가 작업
+                // 경로별 인가 설정
                 .authorizeHttpRequests((auth) -> auth
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/api/v1/auth/register",
-                                "/api/v1/auth/check-nickname", "/api/v1/auth/refresh", "/").permitAll()
-                        .requestMatchers("/api/v1/auth/user-info", "/api/v1/auth/logout",
-                                "/api/v1/auth/withdraw", "/api/v1/auth/profile",
-                                "/api/v1/auth/token/validate", "/my").authenticated()
+//                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/api/v1/auth/register",
+//                                "/api/v1/auth/check-nickname", "/api/v1/auth/refresh", "/").permitAll()
+//                        .requestMatchers("/api/v1/auth/user-info", "/api/v1/auth/logout",
+//                                "/api/v1/auth/withdraw", "/api/v1/auth/profile",
+//                                "/api/v1/auth/token/validate").authenticated()
+                        .requestMatchers("/**").permitAll()
                         .anyRequest().authenticated())
 
-                //세션 설정 : STATELESS
+                // 세션 관리 설정: STATELESS
                 .sessionManagement((session) -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
