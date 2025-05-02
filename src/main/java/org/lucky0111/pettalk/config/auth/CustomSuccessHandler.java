@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.lucky0111.pettalk.domain.dto.auth.CustomOAuth2User;
 import org.lucky0111.pettalk.domain.dto.auth.OAuth2Response;
+
 import org.lucky0111.pettalk.domain.dto.auth.TokenDTO;
 import org.lucky0111.pettalk.domain.entity.user.PetUser;
 import org.lucky0111.pettalk.repository.user.PetUserRepository;
@@ -79,9 +80,9 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
                 // 응답 데이터 생성
                 Map<String, Object> responseData = new HashMap<>();
-                responseData.put("accessToken", tokens.getAccessToken());
-                responseData.put("refreshToken", tokens.getRefreshToken());
-                responseData.put("expiresIn", tokens.getExpiresIn());
+                responseData.put("accessToken", tokens.accessToken());
+                responseData.put("refreshToken", tokens.refreshToken());
+                responseData.put("expiresIn", tokens.expiresIn());
 
                 Map<String, Object> userData = new HashMap<>();
                 userData.put("id", existingUser.getUserId());
@@ -139,9 +140,9 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
                 // 응답 데이터 생성
                 Map<String, Object> responseData = new HashMap<>();
-                responseData.put("accessToken", tokens.getAccessToken());
-                responseData.put("refreshToken", tokens.getRefreshToken());
-                responseData.put("expiresIn", tokens.getExpiresIn());
+                responseData.put("accessToken", tokens.accessToken());
+                responseData.put("refreshToken", tokens.refreshToken());
+                responseData.put("expiresIn", tokens.expiresIn());
 
                 Map<String, Object> userData = new HashMap<>();
                 userData.put("id", existingUser.getUserId());

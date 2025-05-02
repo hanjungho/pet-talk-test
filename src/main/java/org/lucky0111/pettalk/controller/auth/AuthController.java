@@ -1,6 +1,7 @@
 package org.lucky0111.pettalk.controller.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nimbusds.oauth2.sdk.TokenRequest;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -91,7 +92,7 @@ public class AuthController {
     public ResponseEntity<?> registerUser(@RequestBody UserRegistrationDTO registrationDTO) {
         try {
             // 임시 토큰 검증
-            OAuthTempTokenDTO tempTokenInfo = jwtUtil.getTempTokenInfo(registrationDTO.getTempToken());
+            OAuthTempTokenDTO tempTokenInfo = jwtUtil.getTempTokenInfo(registrationDTO.tempToken());
 
             if (tempTokenInfo == null) {
                 return responseService.createErrorResponse("INVALID_TOKEN", "유효하지 않은 임시 토큰입니다.");
@@ -99,27 +100,27 @@ public class AuthController {
 
             // 소셜 ID로 이미 존재하는 사용자 확인
             PetUser existingUser = userRepository.findByProviderAndSocialId(
-                    tempTokenInfo.getProvider(), tempTokenInfo.getProviderId());
+                    tempTokenInfo.provider(), tempTokenInfo.providerId());
 
             PetUser petUser;
 
             if (existingUser != null) {
                 // 기존 사용자 정보 업데이트
                 petUser = existingUser;
-                petUser.setName(registrationDTO.getName());
-                petUser.setNickname(registrationDTO.getNickname());
-                petUser.setProfileImageUrl(registrationDTO.getProfileImageUrl());
+                petUser.setName(registrationDTO.name());
+                petUser.setNickname(registrationDTO.nickname());
+                petUser.setProfileImageUrl(registrationDTO.profileImageUrl());
 
                 System.out.println("기존 사용자 정보 업데이트: " + petUser.getUserId() + ", " + petUser.getName());
             } else {
                 // 새 사용자 생성
                 petUser = new PetUser();
-                petUser.setProvider(tempTokenInfo.getProvider());
-                petUser.setSocialId(tempTokenInfo.getProviderId());
-                petUser.setEmail(tempTokenInfo.getEmail());
-                petUser.setName(registrationDTO.getName());
-                petUser.setNickname(registrationDTO.getNickname());
-                petUser.setProfileImageUrl(registrationDTO.getProfileImageUrl());
+                petUser.setProvider(tempTokenInfo.provider());
+                petUser.setSocialId(tempTokenInfo.providerId());
+                petUser.setEmail(tempTokenInfo.email());
+                petUser.setName(registrationDTO.name());
+                petUser.setNickname(registrationDTO.nickname());
+                petUser.setProfileImageUrl(registrationDTO.profileImageUrl());
                 petUser.setRole("ROLE_USER");
                 petUser.setStatus("ACTIVE");
 
@@ -133,9 +134,9 @@ public class AuthController {
 
             // 응답 데이터 생성
             Map<String, Object> responseData = new HashMap<>();
-            responseData.put("accessToken", tokens.getAccessToken());
-            responseData.put("refreshToken", tokens.getRefreshToken());
-            responseData.put("expiresIn", tokens.getExpiresIn());
+            responseData.put("accessToken", tokens.accessToken());
+            responseData.put("refreshToken", tokens.refreshToken());
+            responseData.put("expiresIn", tokens.expiresIn());
 
             Map<String, Object> userData = new HashMap<>();
             userData.put("id", petUser.getUserId());
@@ -179,9 +180,9 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<?> refreshToken(@RequestBody TokenRequest request) {
+    public ResponseEntity<?> refreshToken(@RequestBody TokenRequestDTO request) {
         try {
-            String refreshToken = request.getRefreshToken();
+            String refreshToken = request.refreshToken();
 
             if (refreshToken == null || refreshToken.isBlank()) {
                 return responseService.createErrorResponse("INVALID_REQUEST", "리프레시 토큰이 필요합니다.");
@@ -192,9 +193,9 @@ public class AuthController {
             if (optionalTokenDTO.isPresent()) {
                 TokenDTO tokenDTO = optionalTokenDTO.get();
                 Map<String, Object> responseData = new HashMap<>();
-                responseData.put("accessToken", tokenDTO.getAccessToken());
-                responseData.put("refreshToken", tokenDTO.getRefreshToken());
-                responseData.put("expiresIn", tokenDTO.getExpiresIn());
+                responseData.put("accessToken", tokenDTO.accessToken());
+                responseData.put("refreshToken", tokenDTO.refreshToken());
+                responseData.put("expiresIn", tokenDTO.expiresIn());
 
                 return responseService.createSuccessResponse(responseData, "토큰이 갱신되었습니다.");
             } else {
@@ -208,9 +209,9 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(@RequestBody TokenRequest request) {
+    public ResponseEntity<?> logout(@RequestBody TokenRequestDTO request) {
         try {
-            String refreshToken = request.getRefreshToken();
+            String refreshToken = request.refreshToken();
 
             if (refreshToken == null || refreshToken.isBlank()) {
                 return responseService.createErrorResponse("INVALID_REQUEST", "리프레시 토큰이 필요합니다.");
@@ -284,11 +285,11 @@ public class AuthController {
             }
 
             // 닉네임 중복 확인 (현재 사용자와 동일한 닉네임은 제외)
-            if (profileUpdateDTO.getNickname() != null && !profileUpdateDTO.getNickname().isBlank()) {
+            if (profileUpdateDTO.nickname() != null && !profileUpdateDTO.nickname().isBlank()) {
                 PetUser currentUser = userRepository.findById(userId).orElse(null);
                 if (currentUser != null &&
-                        !profileUpdateDTO.getNickname().equals(currentUser.getNickname()) &&
-                        userRepository.existsByNickname(profileUpdateDTO.getNickname())) {
+                        !profileUpdateDTO.nickname().equals(currentUser.getNickname()) &&
+                        userRepository.existsByNickname(profileUpdateDTO.nickname())) {
                     return responseService.createErrorResponse("DUPLICATE_NICKNAME", "이미 사용 중인 닉네임입니다. 다른 닉네임을 사용해 주세요.");
                 }
             }
