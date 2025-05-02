@@ -1,13 +1,12 @@
 package org.lucky0111.pettalk.domain.entity.match;
 
 import jakarta.persistence.*;
-import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import org.lucky0111.pettalk.domain.common.BaseTimeEntity;
 import org.lucky0111.pettalk.domain.common.Status;
-import org.lucky0111.pettalk.domain.entity.PetUser;
-import org.lucky0111.pettalk.domain.entity.Trainer;
+import org.lucky0111.pettalk.domain.entity.user.PetUser;
+import org.lucky0111.pettalk.domain.entity.trainer.Trainer;
 
 @Setter
 @Getter
@@ -35,8 +34,6 @@ public class UserApply extends BaseTimeEntity {
     private String content;
 
     private String imageUrl;
-
-    private String videoUrl;
 
     @Column(nullable = false)
     private Status status;

@@ -1,13 +1,13 @@
 package org.lucky0111.pettalk.controller.auth;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.servlet.http.HttpServletRequest;
-import org.lucky0111.pettalk.domain.dto.auth.OAuthTempTokenDTO;
-import org.lucky0111.pettalk.domain.dto.auth.TokenDTO;
-import org.lucky0111.pettalk.domain.dto.auth.TokenRequest;
-import org.lucky0111.pettalk.domain.dto.auth.UserRegistrationDTO;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.lucky0111.pettalk.domain.dto.auth.*;
 import org.lucky0111.pettalk.domain.dto.user.ProfileUpdateDTO;
-import org.lucky0111.pettalk.domain.entity.PetUser;
+import org.lucky0111.pettalk.domain.entity.user.PetUser;
 import org.lucky0111.pettalk.repository.user.PetUserRepository;
 import org.lucky0111.pettalk.service.auth.ResponseService;
 import org.lucky0111.pettalk.service.user.UserService;
@@ -20,27 +20,22 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/auth")
 @SecurityRequirement(name = "bearerAuth")
+@RequiredArgsConstructor
 public class AuthController {
 
     private final JWTUtil jwtUtil;
     private final PetUserRepository userRepository;
     private final ResponseService responseService;
     private final UserService userService;
-
-    public AuthController(JWTUtil jwtUtil, PetUserRepository userRepository, ResponseService responseService, UserService userService) {
-        this.jwtUtil = jwtUtil;
-        this.userRepository = userRepository;
-        this.responseService = responseService;
-        this.userService = userService;
-    }
+    private final ObjectMapper objectMapper;
 
     @GetMapping("/user-info")
     public ResponseEntity<?> getUserInfo(HttpServletRequest request) {
@@ -350,6 +345,69 @@ public class AuthController {
         } catch (Exception e) {
             System.err.println("토큰 검증 중 오류 발생: " + e.getMessage());
             return responseService.createErrorResponse("INVALID_TOKEN", "유효하지 않은 토큰입니다.");
+        }
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> loginWithOAuthData(@RequestBody LoginDTO loginDTO) {
+        try {
+            String encodedData = loginDTO.encodedData();
+            log.info("Received encoded data: {}", encodedData);
+
+            // URL 디코딩 두 번 수행 (이중 URL 인코딩 처리)
+            String urlDecodedData = URLDecoder.decode(encodedData, StandardCharsets.UTF_8);
+            urlDecodedData = URLDecoder.decode(urlDecodedData, StandardCharsets.UTF_8);
+
+            log.info("After URL decoding: {}", urlDecodedData);
+
+            // Base64 디코딩
+            byte[] decodedBytes = Base64.getDecoder().decode(urlDecodedData);
+            String jsonData = new String(decodedBytes, StandardCharsets.UTF_8);
+
+            log.info("Decoded JSON: {}", jsonData);
+
+            // JSON 파싱
+            Map<String, Object> userData = objectMapper.readValue(jsonData, Map.class);
+
+            // 사용자 정보 추출
+            Map<String, Object> userInfo = (Map<String, Object>) userData.get("user");
+
+            if (userInfo == null || userInfo.get("id") == null) {
+                return responseService.createErrorResponse("INVALID_DATA", "유효하지 않은 사용자 정보입니다.");
+            }
+
+            // 사용자 ID를 UUID로 변환
+            UUID userId = UUID.fromString(userInfo.get("id").toString());
+
+            // 데이터베이스에서 사용자 조회
+            PetUser user = userRepository.findById(userId)
+                    .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자입니다."));
+
+            // 사용자 상태 확인
+            if (!"ACTIVE".equals(user.getStatus())) {
+                return responseService.createErrorResponse("INACTIVE_USER", "비활성화된 사용자입니다.");
+            }
+
+            // 기존에 제공된 토큰 사용
+            String accessToken = (String) userData.get("accessToken");
+            String refreshToken = (String) userData.get("refreshToken");
+            Long expiresIn = ((Number) userData.get("expiresIn")).longValue();
+
+            // 응답 데이터 생성
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("accessToken", accessToken);
+            responseData.put("refreshToken", refreshToken);
+            responseData.put("expiresIn", expiresIn);
+            responseData.put("user", userInfo);
+
+            return responseService.createSuccessResponse(responseData, "로그인이 성공적으로 처리되었습니다.");
+
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid user error: {}", e.getMessage());
+            return responseService.createErrorResponse("INVALID_USER", e.getMessage());
+        } catch (Exception e) {
+            log.error("Server error: {}", e.getMessage(), e);
+            return responseService.createErrorResponse("SERVER_ERROR", "서버 오류가 발생했습니다: " + e.getMessage());
         }
     }
 }

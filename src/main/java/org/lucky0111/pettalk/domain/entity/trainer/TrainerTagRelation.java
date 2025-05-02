@@ -1,4 +1,4 @@
-package org.lucky0111.pettalk.domain.entity.community;
+package org.lucky0111.pettalk.domain.entity.trainer;
 
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -6,10 +6,10 @@ import org.lucky0111.pettalk.domain.entity.common.Tag;
 
 @Getter
 @Entity
-@Table(name = "post_tags", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"tag_id", "post_id"})
+@Table(name = "trainer_tags", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"tag_id", "trainer_id"})
 })
-public class PostTagRelation {
+public class TrainerTagRelation {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -19,6 +19,6 @@ public class PostTagRelation {
     private Tag tag;
 
     @ManyToOne
-    @JoinColumn(name = "post_id")
-    private Post post;
+    @JoinColumn(name = "trainer_id")
+    private Trainer trainer;
 }
