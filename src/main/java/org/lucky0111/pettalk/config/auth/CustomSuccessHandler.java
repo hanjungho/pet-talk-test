@@ -39,12 +39,6 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     @Value("${front.url}")
     private String frontUrl;
 
-    @Value("${cookie.domain:localhost}")
-    private String cookieDomain;
-
-    @Value("${refresh.token.cookie.expiry:2592000}") // 30일(초)
-    private int refreshTokenCookieExpiry;
-
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
@@ -197,21 +191,4 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         response.sendRedirect(targetUrl);
     }
 
-    // HTTP-Only 쿠키 생성 메서드
-    private Cookie createRefreshTokenCookie(String refreshToken) {
-        Cookie refreshTokenCookie = new Cookie("refresh_token", refreshToken);
-        refreshTokenCookie.setHttpOnly(true);
-        refreshTokenCookie.setSecure(true); // HTTPS에서만 전송
-        refreshTokenCookie.setPath("/");
-
-        // 쿠키 도메인 설정 (localhost가 아닌 경우)
-        if (!"localhost".equals(cookieDomain)) {
-            refreshTokenCookie.setDomain(cookieDomain);
-        }
-
-        // 쿠키 만료 시간 설정 (초 단위)
-        refreshTokenCookie.setMaxAge(refreshTokenCookieExpiry);
-
-        return refreshTokenCookie;
-    }
 }

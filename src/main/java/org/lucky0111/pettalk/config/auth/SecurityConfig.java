@@ -27,7 +27,7 @@ public class SecurityConfig {
     private final JWTUtil jwtUtil;
 
     @Value("${front.url}")
-    private String frontUrl;
+    private String fronturl;
 
     public SecurityConfig(CustomOAuth2UserService customOAuth2UserService, CustomSuccessHandler customSuccessHandler, JWTUtil jwtUtil) {
 
@@ -47,7 +47,7 @@ public class SecurityConfig {
 
                         CorsConfiguration configuration = new CorsConfiguration();
 
-                        configuration.setAllowedOrigins(Collections.singletonList(frontUrl));
+                        configuration.setAllowedOrigins(Collections.singletonList(fronturl));
                         configuration.setAllowedMethods(Collections.singletonList("*"));
                         configuration.setAllowCredentials(true);
                         configuration.setAllowedHeaders(Collections.singletonList("*"));
