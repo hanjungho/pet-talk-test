@@ -1,37 +1,40 @@
 package org.lucky0111.pettalk.config.auth;
 
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.lucky0111.pettalk.domain.dto.auth.CustomOAuth2User;
 import org.lucky0111.pettalk.domain.dto.auth.OAuth2Response;
 import org.lucky0111.pettalk.domain.dto.auth.TokenDTO;
 import org.lucky0111.pettalk.domain.entity.PetUser;
-import org.lucky0111.pettalk.repository.user.UserRepository;
+import org.lucky0111.pettalk.repository.user.PetUserRepository;
 import org.lucky0111.pettalk.util.auth.JWTUtil;
 import org.lucky0111.pettalk.util.auth.OAuth2UserServiceHelper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.util.Collection;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 
 @Component
+@RequiredArgsConstructor
 public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
     private final JWTUtil jwtUtil;
     private final OAuth2UserServiceHelper oAuth2UserServiceHelper;
-    private final UserRepository userRepository;
+    private final PetUserRepository userRepository;
 
     @Value("${front.url}")
     private String frontUrl;
@@ -42,11 +45,6 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     @Value("${refresh.token.cookie.expiry:2592000}") // 30일(초)
     private int refreshTokenCookieExpiry;
 
-    public CustomSuccessHandler(JWTUtil jwtUtil, OAuth2UserServiceHelper oAuth2UserServiceHelper, UserRepository userRepository) {
-        this.jwtUtil = jwtUtil;
-        this.oAuth2UserServiceHelper = oAuth2UserServiceHelper;
-        this.userRepository = userRepository;
-    }
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
@@ -86,12 +84,31 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
                 // 토큰 생성
                 TokenDTO tokens = jwtUtil.generateTokenPair(existingUser);
 
-                // 토큰을 헤더와 쿠키에 설정
-                response.setHeader("access", tokens.getAccessToken());
-                response.addCookie(createRefreshTokenCookie(tokens.getRefreshToken()));
+                // 응답 데이터 생성
+                Map<String, Object> responseData = new HashMap<>();
+                responseData.put("accessToken", tokens.getAccessToken());
+                responseData.put("refreshToken", tokens.getRefreshToken());
+                responseData.put("expiresIn", tokens.getExpiresIn());
 
-                // 프론트엔드로 리다이렉트 (토큰 정보 없이)
-                String targetUrl = frontUrl + "/oauth/callback";
+                Map<String, Object> userData = new HashMap<>();
+                userData.put("id", existingUser.getUserId());
+                userData.put("email", existingUser.getEmail());
+                userData.put("name", existingUser.getName());
+                userData.put("nickname", existingUser.getNickname());
+                userData.put("profileImageUrl", existingUser.getProfileImageUrl());
+                userData.put("role", existingUser.getRole());
+
+                responseData.put("user", userData);
+
+                // 데이터를 JSON 문자열로 변환
+                ObjectMapper objectMapper = new ObjectMapper();
+                String jsonData = objectMapper.writeValueAsString(responseData);
+
+                // JSON 데이터를 Base64로 인코딩
+                String encodedData = Base64.getEncoder().encodeToString(jsonData.getBytes(StandardCharsets.UTF_8));
+
+                // URL에 인코딩된 데이터 추가
+                String targetUrl = frontUrl + "/oauth/callback?data=" + URLEncoder.encode(encodedData, StandardCharsets.UTF_8);
 
                 response.sendRedirect(targetUrl);
                 return;
@@ -127,12 +144,31 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
                 // 토큰 생성
                 TokenDTO tokens = jwtUtil.generateTokenPair(existingUser);
 
-                // 토큰을 헤더와 쿠키에 설정
-                response.setHeader("Authorization", "Bearer " + tokens.getAccessToken());
-                response.addCookie(createRefreshTokenCookie(tokens.getRefreshToken()));
+                // 응답 데이터 생성
+                Map<String, Object> responseData = new HashMap<>();
+                responseData.put("accessToken", tokens.getAccessToken());
+                responseData.put("refreshToken", tokens.getRefreshToken());
+                responseData.put("expiresIn", tokens.getExpiresIn());
 
-                // 프론트엔드로 리다이렉트 (토큰 정보 없이)
-                String targetUrl = frontUrl + "/oauth/callback";
+                Map<String, Object> userData = new HashMap<>();
+                userData.put("id", existingUser.getUserId());
+                userData.put("email", existingUser.getEmail());
+                userData.put("name", existingUser.getName());
+                userData.put("nickname", existingUser.getNickname());
+                userData.put("profileImageUrl", existingUser.getProfileImageUrl());
+                userData.put("role", existingUser.getRole());
+
+                responseData.put("user", userData);
+
+                // 데이터를 JSON 문자열로 변환
+                ObjectMapper objectMapper = new ObjectMapper();
+                String jsonData = objectMapper.writeValueAsString(responseData);
+
+                // JSON 데이터를 Base64로 인코딩
+                String encodedData = Base64.getEncoder().encodeToString(jsonData.getBytes(StandardCharsets.UTF_8));
+
+                // URL에 인코딩된 데이터 추가
+                String targetUrl = frontUrl + "/oauth/callback?data=" + URLEncoder.encode(encodedData, StandardCharsets.UTF_8);
 
                 response.sendRedirect(targetUrl);
                 return;

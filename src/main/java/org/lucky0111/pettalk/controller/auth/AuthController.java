@@ -7,7 +7,7 @@ import org.lucky0111.pettalk.domain.dto.auth.TokenRequest;
 import org.lucky0111.pettalk.domain.dto.auth.UserRegistrationDTO;
 import org.lucky0111.pettalk.domain.dto.user.ProfileUpdateDTO;
 import org.lucky0111.pettalk.domain.entity.PetUser;
-import org.lucky0111.pettalk.repository.user.UserRepository;
+import org.lucky0111.pettalk.repository.user.PetUserRepository;
 import org.lucky0111.pettalk.service.auth.ResponseService;
 import org.lucky0111.pettalk.service.user.UserService;
 import org.lucky0111.pettalk.util.auth.JWTUtil;
@@ -22,6 +22,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -29,11 +30,11 @@ import java.util.Optional;
 public class AuthController {
 
     private final JWTUtil jwtUtil;
-    private final UserRepository userRepository;
+    private final PetUserRepository userRepository;
     private final ResponseService responseService;
     private final UserService userService;
 
-    public AuthController(JWTUtil jwtUtil, UserRepository userRepository, ResponseService responseService, UserService userService) {
+    public AuthController(JWTUtil jwtUtil, PetUserRepository userRepository, ResponseService responseService, UserService userService) {
         this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
         this.responseService = responseService;
@@ -51,7 +52,7 @@ public class AuthController {
             }
 
             // JWT 토큰에서 사용자 ID 추출
-            String userId = jwtUtil.getUserId(extractJwtToken(request));
+            UUID userId = jwtUtil.getUserId(extractJwtToken(request));
 
             if (userId == null) {
                 return responseService.createErrorResponse("INVALID_TOKEN", "유효하지 않은 토큰입니다.");
@@ -245,7 +246,7 @@ public class AuthController {
             }
 
             // JWT 토큰에서 사용자 ID 추출
-            String userId = jwtUtil.getUserId(extractJwtToken(request));
+            UUID userId = jwtUtil.getUserId(extractJwtToken(request));
 
             if (userId == null) {
                 return responseService.createErrorResponse("INVALID_TOKEN", "유효하지 않은 토큰입니다.");
@@ -280,7 +281,7 @@ public class AuthController {
             }
 
             // JWT 토큰에서 사용자 ID 추출
-            String userId = jwtUtil.getUserId(extractJwtToken(request));
+            UUID userId = jwtUtil.getUserId(extractJwtToken(request));
 
             if (userId == null) {
                 return responseService.createErrorResponse("INVALID_TOKEN", "유효하지 않은 토큰입니다.");
