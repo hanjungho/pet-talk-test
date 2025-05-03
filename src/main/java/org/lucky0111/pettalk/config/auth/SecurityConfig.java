@@ -23,12 +23,8 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * 보안 설정 클래스
- */
 @Configuration
 @EnableWebSecurity
-@RequiredArgsConstructor
 public class SecurityConfig {
 
     private final CustomOAuth2UserService customOAuth2UserService;
@@ -38,62 +34,68 @@ public class SecurityConfig {
     @Value("${front.url}")
     private String frontUrl;
 
-    /**
-     * CSRF 토큰 저장소를 구성합니다.
-     */
-    @Bean
-    public CsrfTokenRepository csrfTokenRepository() {
-        HttpSessionCsrfTokenRepository repository = new HttpSessionCsrfTokenRepository();
-        repository.setHeaderName("X-CSRF-TOKEN");
-        return repository;
+    public SecurityConfig(CustomOAuth2UserService customOAuth2UserService, CustomSuccessHandler customSuccessHandler, JWTUtil jwtUtil) {
+
+        this.customOAuth2UserService = customOAuth2UserService;
+        this.customSuccessHandler = customSuccessHandler;
+        this.jwtUtil = jwtUtil;
     }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        // CORS 설정
-        http.cors(corsCustomizer -> corsCustomizer.configurationSource(new CorsConfigurationSource() {
-            @Override
-            public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
-                CorsConfiguration configuration = new CorsConfiguration();
-                configuration.setAllowedOrigins(Collections.singletonList(frontUrl));
-                configuration.setAllowedMethods(Collections.singletonList("*"));
-                configuration.setAllowCredentials(true);
-                configuration.setAllowedHeaders(Collections.singletonList("*"));
-                configuration.setMaxAge(3600L);
-                configuration.setExposedHeaders(List.of("Set-Cookie", "Authorization",
-                        "New-Access-Token", "New-Refresh-Token", "Token-Expires-In"));
-                return configuration;
-            }
-        }));
 
-        // CSRF 비활성화 (JWT 사용으로 필요 없음)
-        http.csrf(AbstractHttpConfigurer::disable);
+        http
+                .cors(corsCustomizer -> corsCustomizer.configurationSource(new CorsConfigurationSource() {
 
-        // 폼 로그인 비활성화
-        http.formLogin(AbstractHttpConfigurer::disable);
+                    @Override
+                    public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
 
-        // HTTP Basic 인증 비활성화
-        http.httpBasic(AbstractHttpConfigurer::disable);
+                        CorsConfiguration configuration = new CorsConfiguration();
 
-        // JWT 필터 추가
-        http.addFilterBefore(new JWTFilter(jwtUtil), UsernamePasswordAuthenticationFilter.class);
+                        configuration.setAllowedOrigins(Collections.singletonList(frontUrl));
+                        configuration.setAllowedMethods(Collections.singletonList("*"));
+                        configuration.setAllowCredentials(true);
+                        configuration.setAllowedHeaders(Collections.singletonList("*"));
+                        configuration.setMaxAge(3600L);
 
-        // OAuth2 로그인 설정
-        http.oauth2Login(oauth2 -> oauth2
-                .userInfoEndpoint(userInfoEndpointConfig -> userInfoEndpointConfig
-                        .userService(customOAuth2UserService))
-                .successHandler(customSuccessHandler)
-        );
+                        configuration.setExposedHeaders(Collections.singletonList("Set-Cookie"));
+                        configuration.setExposedHeaders(Collections.singletonList("Authorization"));
 
-        // 경로별 인가 설정
-        http.authorizeHttpRequests(auth -> auth
-                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/api/v1/auth/register",
-                        "/api/v1/auth/check-nickname", "/api/v1/auth/refresh", "/").permitAll()
-                .anyRequest().permitAll());
+                        return configuration;
+                    }
+                }))
 
-        // 세션 설정: STATELESS
-        http.sessionManagement(session -> session
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+                //csrf disable
+                .csrf((auth) -> auth.disable())
+
+                //From 로그인 방식 disable
+                .formLogin((auth) -> auth.disable())
+
+                //HTTP Basic 인증 방식 disable
+                .httpBasic((auth) -> auth.disable())
+
+                //JWTFilter 추가
+                .addFilterBefore(new JWTFilter(jwtUtil), UsernamePasswordAuthenticationFilter.class)
+
+                //oauth2
+                .oauth2Login((oauth2) -> oauth2
+                        .userInfoEndpoint((userInfoEndpointConfig) -> userInfoEndpointConfig
+                                .userService(customOAuth2UserService))
+                        .successHandler(customSuccessHandler)
+                )
+
+                //경로별 인가 작업
+                .authorizeHttpRequests((auth) -> auth
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/api/v1/auth/register",
+                                "/api/v1/auth/check-nickname", "/api/v1/auth/refresh", "/").permitAll()
+//                        .requestMatchers("/api/v1/auth/user-info", "/api/v1/auth/logout",
+//                                "/api/v1/auth/withdraw", "/api/v1/auth/profile",
+//                                "/api/v1/auth/token/validate", "/my").authenticated()
+                        .anyRequest().permitAll())
+
+                //세션 설정 : STATELESS
+                .sessionManagement((session) -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         return http.build();
     }
