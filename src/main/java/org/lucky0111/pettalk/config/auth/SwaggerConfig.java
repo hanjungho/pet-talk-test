@@ -11,9 +11,15 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class SwaggerConfig {
 
+    /**
+     * Swagger UI 설정
+     */
     @Bean
     public OpenAPI openAPI() {
-        // 보안 스키마 정의
+        /*
+          Swagger UI에서 사용할 보안 스키마 정의
+          JWT 토큰을 Authorization 헤더에 Bearer {token} 형식으로 전달
+         */
         SecurityScheme securityScheme = new SecurityScheme()
                 .type(SecurityScheme.Type.HTTP)
                 .scheme("bearer")
@@ -21,7 +27,10 @@ public class SwaggerConfig {
                 .in(SecurityScheme.In.HEADER)
                 .name("Authorization");
 
-        // 보안 요구사항 정의
+        /*
+          Swagger UI에서 사용할 보안 요구 사항 정의
+          JWT 토큰을 Authorization 헤더에 Bearer {token} 형식으로 전달
+         */
         SecurityRequirement securityRequirement = new SecurityRequirement().addList("bearerAuth");
 
         return new OpenAPI()

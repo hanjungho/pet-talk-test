@@ -29,6 +29,9 @@ public class SecurityConfig {
     @Value("${front.url}")
     private String frontUrl;
 
+    /**
+     * SecurityConfig 생성자
+     */
     public SecurityConfig(CustomOAuth2UserService customOAuth2UserService, CustomSuccessHandler customSuccessHandler, JWTUtil jwtUtil) {
 
         this.customOAuth2UserService = customOAuth2UserService;
@@ -36,6 +39,9 @@ public class SecurityConfig {
         this.jwtUtil = jwtUtil;
     }
 
+    /**
+     * CORS 설정
+     */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 

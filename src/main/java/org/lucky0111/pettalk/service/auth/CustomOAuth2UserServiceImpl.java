@@ -24,6 +24,13 @@ public class CustomOAuth2UserServiceImpl  extends DefaultOAuth2UserService imple
 
     private final PetUserRepository userRepository;
 
+    /**
+     * OAuth2 로그인 사용자 정보를 로드합니다.
+     *
+     * @param userRequest OAuth2 사용자 요청
+     * @return OAuth2User
+     * @throws OAuth2AuthenticationException 인증 예외
+     */
     @Override
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
         try {

@@ -15,6 +15,9 @@ public class TokenCleanupScheduler {
         this.jwtUtil = jwtUtil;
     }
 
+    /**
+     * 매일 새벽 2시에 만료된 리프레시 토큰과 폐기된 리프레시 토큰을 정리하는 스케줄러
+     */
     @Scheduled(cron = "0 0 2 * * ?")
     public void cleanupTokens() {
         System.out.println("Running scheduled task to clean up expired and revoked refresh tokens");

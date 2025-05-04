@@ -39,14 +39,23 @@ public class JWTUtil {
     private Integer refreshTokenExpirationDays; // Default 30 days
 
     // 토큰 생성 메서드들 - 모두 JWTTokenProvider로 위임
+    /**
+     * JWT를 생성합니다.
+     */
     public String createJwt(String provider, String socialId, UUID userId, String role, Long expiredMs) {
         return tokenProvider.createJwt(provider, socialId, userId, role, expiredMs);
     }
 
+    /**
+     * JWT를 생성합니다. 이메일 포함
+     */
     public String createJwtWithEmail(String provider, String socialId, UUID userId, String role, String email, Long expiredMs) {
         return tokenProvider.createJwtWithEmail(provider, socialId, userId, role, email, expiredMs);
     }
 
+    /**
+     * 임시 토큰을 생성합니다.
+     */
     public String createTempToken(String provider, String providerId, String email, String name, Long expiredMs) {
         return tokenProvider.createTempToken(provider, providerId, email, name, expiredMs);
     }

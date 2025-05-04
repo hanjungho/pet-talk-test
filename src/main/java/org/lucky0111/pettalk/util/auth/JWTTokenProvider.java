@@ -146,11 +146,17 @@ public class JWTTokenProvider {
     public String getRole(String token) { return getClaimValue(token, "role"); }
     public String getEmail(String token) { return getClaimValue(token, "email"); }
 
+    /**
+     * 사용자 ID를 UUID 형식으로 반환합니다.
+     */
     public UUID getUserId(String token) {
         String userIdStr = getClaimValue(token, "userId");
         return userIdStr != null ? UUID.fromString(userIdStr) : null;
     }
 
+    /**
+     * 주어진 claimName에 해당하는 값을 토큰에서 추출합니다.
+     */
     private String getClaimValue(String token, String claimName) {
         Claims claims = extractAllClaims(token);
         return claims != null ? claims.get(claimName, String.class) : null;
