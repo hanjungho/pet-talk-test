@@ -3,12 +3,9 @@ package org.lucky0111.pettalk.util.auth;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lucky0111.pettalk.domain.dto.auth.OAuthTempTokenDTO;
-import org.lucky0111.pettalk.domain.dto.auth.TokenDTO;
 import org.lucky0111.pettalk.domain.entity.auth.RefreshToken;
 import org.lucky0111.pettalk.domain.entity.user.PetUser;
 import org.lucky0111.pettalk.repository.auth.RefreshTokenRepository;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.security.SecureRandom;
@@ -28,14 +25,11 @@ public class JWTTokenManager {
 
     private final RefreshTokenRepository refreshTokenRepository;
 
-    @Value("${spring.jwt.refresh-token-expiration-days:30}")
-    private Integer refreshTokenExpirationDays; // Default 30 days
-
     /**
      * 새 리프레시 토큰을 생성합니다.
      */
     @Transactional
-    public String generateRefreshToken(PetUser user) {
+    public String generateRefreshToken(PetUser user, Integer refreshTokenExpirationDays) {
         byte[] randomBytes = new byte[32];
         new SecureRandom().nextBytes(randomBytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);

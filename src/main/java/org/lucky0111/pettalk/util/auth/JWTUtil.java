@@ -33,8 +33,10 @@ public class JWTUtil {
     private final JWTTokenProvider tokenProvider;
     private final JWTTokenManager tokenManager;
 
-    @Value("${spring.jwt.access-token-expiration-ms:3600000}")
+    @Value("${spring.jwt.access-token-expiration-ms}")
     private Long accessTokenExpirationMs; // Default 1 hour
+    @Value("${spring.jwt.refresh-token-expiration-days}")
+    private Integer refreshTokenExpirationDays; // Default 30 days
 
     // 토큰 생성 메서드들 - 모두 JWTTokenProvider로 위임
     public String createJwt(String provider, String socialId, UUID userId, String role, Long expiredMs) {
@@ -59,8 +61,8 @@ public class JWTUtil {
     public String getEmail(String token) { return tokenProvider.getEmail(token); }
 
     // 리프레시 토큰 관리 - 모두 JWTTokenManager로 위임
-    public String generateRefreshToken(PetUser user) {
-        return tokenManager.generateRefreshToken(user);
+    public String generateRefreshToken(PetUser user, Integer refreshTokenExpirationDays) {
+        return tokenManager.generateRefreshToken(user, refreshTokenExpirationDays);
     }
 
     public boolean revokeRefreshToken(String refreshToken) {
@@ -110,7 +112,7 @@ public class JWTUtil {
                 createJwt(user.getProvider(), user.getSocialId(), user.getUserId(),
                         user.getRole(), accessTokenExpirationMs);
 
-        String refreshToken = generateRefreshToken(user);
+        String refreshToken = generateRefreshToken(user, refreshTokenExpirationDays);
         return new TokenDTO(accessToken, refreshToken, accessTokenExpirationMs / 1000);
     }
 
