@@ -2,6 +2,7 @@ package org.lucky0111.pettalk.service.user;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.lucky0111.pettalk.domain.dto.user.ProfileUpdateDTO;
 import org.lucky0111.pettalk.domain.entity.user.PetUser;
 import org.lucky0111.pettalk.repository.user.PetUserRepository;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import java.util.Optional;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
@@ -18,40 +20,97 @@ public class UserServiceImpl implements UserService {
 
     @Transactional
     public boolean withdrawUser(UUID userId) {
-        Optional<PetUser> userOptional = userRepository.findById(userId);
+        Optional<PetUser> userOptional = findUserById(userId);
 
         if (userOptional.isPresent()) {
             PetUser user = userOptional.get();
-            // 실제 삭제 대신 상태를 변경하는 논리적 삭제 (Soft Delete) 방식 적용
-            user.setStatus("WITHDRAWN");
-            user.setSocialId(null);
-            userRepository.save(user);
+            withdrawUserProcess(user);
             return true;
         }
 
         return false;
     }
 
+    /**
+     * 사용자 탈퇴 처리
+     */
+    private void withdrawUserProcess(PetUser user) {
+        updateUserStatus(user);
+        removeUserSocialId(user);
+        saveUser(user);
+    }
+
+    /**
+     * 사용자 상태 업데이트
+     */
+    private void updateUserStatus(PetUser user) {
+        user.setStatus("WITHDRAWN");
+    }
+
+    /**
+     * 사용자 소셜 ID 제거
+     */
+    private void removeUserSocialId(PetUser user) {
+        user.setSocialId(null);
+    }
+
     @Transactional
     public PetUser updateProfile(UUID userId, ProfileUpdateDTO profileUpdateDTO) {
-        Optional<PetUser> userOptional = userRepository.findById(userId);
+        Optional<PetUser> userOptional = findUserById(userId);
 
         if (userOptional.isPresent()) {
             PetUser user = userOptional.get();
-
-            // 닉네임 업데이트 (값이 있을 경우에만)
-            if (profileUpdateDTO.nickname() != null && !profileUpdateDTO.nickname().isBlank()) {
-                user.setNickname(profileUpdateDTO.nickname());
-            }
-
-            // 프로필 이미지 URL 업데이트 (값이 있을 경우에만)
-            if (profileUpdateDTO.profileImageUrl() != null && !profileUpdateDTO.profileImageUrl().isBlank()) {
-                user.setProfileImageUrl(profileUpdateDTO.profileImageUrl());
-            }
-
-            return userRepository.save(user);
+            updateUserProfile(user, profileUpdateDTO);
+            return saveUser(user);
         }
 
         return null;
+    }
+
+    /**
+     * 사용자 ID로 사용자 조회
+     */
+    private Optional<PetUser> findUserById(UUID userId) {
+        return userRepository.findById(userId);
+    }
+
+    /**
+     * 사용자 저장
+     */
+    private PetUser saveUser(PetUser user) {
+        return userRepository.save(user);
+    }
+
+    /**
+     * 사용자 프로필 업데이트
+     */
+    private void updateUserProfile(PetUser user, ProfileUpdateDTO profileUpdateDTO) {
+        updateNicknameIfPresent(user, profileUpdateDTO.nickname());
+        updateProfileImageUrlIfPresent(user, profileUpdateDTO.profileImageUrl());
+    }
+
+    /**
+     * 닉네임이 존재하면 업데이트
+     */
+    private void updateNicknameIfPresent(PetUser user, String nickname) {
+        if (isNotBlank(nickname)) {
+            user.setNickname(nickname);
+        }
+    }
+
+    /**
+     * 프로필 이미지 URL이 존재하면 업데이트
+     */
+    private void updateProfileImageUrlIfPresent(PetUser user, String profileImageUrl) {
+        if (isNotBlank(profileImageUrl)) {
+            user.setProfileImageUrl(profileImageUrl);
+        }
+    }
+
+    /**
+     * 문자열이 비어있지 않은지 확인
+     */
+    private boolean isNotBlank(String str) {
+        return str != null && !str.isBlank();
     }
 }
