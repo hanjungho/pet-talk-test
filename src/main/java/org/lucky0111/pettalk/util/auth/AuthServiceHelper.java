@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lucky0111.pettalk.domain.entity.user.PetUser;
 import org.lucky0111.pettalk.exception.CustomException;
-import org.lucky0111.pettalk.service.user.CommonUserService;
+import org.lucky0111.pettalk.service.user.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,7 +21,7 @@ import java.util.UUID;
 public class AuthServiceHelper {
 
     private final JWTUtil jwtUtil;
-    private final CommonUserService commonUserService;
+    private final UserService UserService;
     private final TokenUtils tokenUtils;
 
     /**
@@ -43,7 +43,7 @@ public class AuthServiceHelper {
      */
     public PetUser getCurrentUser(HttpServletRequest request) {
         UUID currentUserUUID = getCurrentUserUUID(request);
-        return commonUserService.findUserByIdOrThrow(currentUserUUID);
+        return UserService.findUserByIdOrThrow(currentUserUUID);
     }
 
     /**

@@ -11,7 +11,6 @@ import org.lucky0111.pettalk.domain.entity.user.PetUser;
 import org.lucky0111.pettalk.exception.CustomException;
 import org.lucky0111.pettalk.repository.user.PetUserRepository;
 import org.lucky0111.pettalk.service.auth.ResponseService;
-import org.lucky0111.pettalk.service.user.CommonUserService;
 import org.lucky0111.pettalk.service.user.UserService;
 import org.lucky0111.pettalk.util.auth.AuthServiceHelper;
 import org.lucky0111.pettalk.util.auth.JWTUtil;
@@ -37,7 +36,7 @@ public class AuthController {
     private final ObjectMapper objectMapper;
     private final AuthServiceHelper authHelper;
     private final TokenUtils tokenUtils;
-    private final CommonUserService commonUserService;
+    private final UserService UserService;
 
     /**
      * 예외 처리 메서드
@@ -175,7 +174,7 @@ public class AuthController {
      * 사용자 정보 검증 및 반환
      */
     private PetUser findAndValidateUser(UUID userId) {
-        PetUser user = commonUserService.findUserByIdOrThrow(userId);
+        PetUser user = UserService.findUserByIdOrThrow(userId);
         validateUserStatus(user);
         return user;
     }
@@ -285,7 +284,7 @@ public class AuthController {
             authHelper.validateAuthentication();
 
             UUID userId = tokenUtils.getCurrentUserUUID(request);
-            PetUser user = commonUserService.findUserByIdOrThrow(userId);
+            PetUser user = UserService.findUserByIdOrThrow(userId);
 
             Map<String, Object> userData = authHelper.createUserDataMap(user);
 

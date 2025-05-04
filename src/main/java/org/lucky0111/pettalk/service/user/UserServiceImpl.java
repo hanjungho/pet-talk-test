@@ -5,8 +5,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lucky0111.pettalk.domain.dto.user.ProfileUpdateDTO;
 import org.lucky0111.pettalk.domain.entity.user.PetUser;
+import org.lucky0111.pettalk.exception.CustomException;
 import org.lucky0111.pettalk.repository.user.PetUserRepository;
 import org.lucky0111.pettalk.util.auth.StringUtils;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -18,11 +20,32 @@ import java.util.UUID;
 public class UserServiceImpl implements UserService {
 
     private final PetUserRepository userRepository;
-    private final CommonUserService commonUserService;
+    private final UserService UserService;
+
+    /**
+     * 사용자 ID로 사용자를 찾고, 없으면 예외를 던집니다.
+     *
+     * @param userId 사용자 ID
+     * @return 사용자가 존재하면 해당 사용자, 없으면 예외
+     */
+    public PetUser findUserByIdOrThrow(UUID userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+    }
+
+    /**
+     * 사용자 ID로 사용자를 찾습니다.
+     *
+     * @param userId 사용자 ID
+     * @return 사용자가 존재하면 Optional에 포함된 사용자, 없으면 빈 Optional
+     */
+    public Optional<PetUser> findUserById(UUID userId) {
+        return userRepository.findById(userId);
+    }
 
     @Transactional
     public boolean withdrawUser(UUID userId) {
-        Optional<PetUser> userOptional = commonUserService.findUserById(userId);
+        Optional<PetUser> userOptional = UserService.findUserById(userId);
 
         if (userOptional.isPresent()) {
             PetUser user = userOptional.get();
@@ -58,7 +81,7 @@ public class UserServiceImpl implements UserService {
 
     @Transactional
     public PetUser updateProfile(UUID userId, ProfileUpdateDTO profileUpdateDTO) {
-        Optional<PetUser> userOptional = commonUserService.findUserById(userId);
+        Optional<PetUser> userOptional = UserService.findUserById(userId);
 
         if (userOptional.isPresent()) {
             PetUser user = userOptional.get();

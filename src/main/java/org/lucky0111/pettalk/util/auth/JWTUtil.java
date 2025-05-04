@@ -70,22 +70,37 @@ public class JWTUtil {
     public String getEmail(String token) { return tokenProvider.getEmail(token); }
 
     // 리프레시 토큰 관리 - 모두 JWTTokenManager로 위임
+    /**
+     * 리프레시 토큰을 생성합니다.
+     */
     public String generateRefreshToken(PetUser user, Integer refreshTokenExpirationDays) {
         return tokenManager.generateRefreshToken(user, refreshTokenExpirationDays);
     }
 
+    /**
+     * 리프레시 토큰을 폐기합니다.
+     */
     public boolean revokeRefreshToken(String refreshToken) {
         return tokenManager.revokeRefreshToken(refreshToken);
     }
 
+    /**
+     * 사용자의 모든 리프레시 토큰을 폐기합니다.
+     */
     public void revokeAllUserTokens(UUID userId) {
         tokenManager.revokeAllUserTokens(userId);
     }
 
+    /**
+     * 만료된 리프레시 토큰을 제거합니다.
+     */
     public void removeExpiredTokens() {
         tokenManager.removeExpiredTokens();
     }
 
+    /**
+     * 폐기된 리프레시 토큰을 제거합니다.
+     */
     public void removeRevokedTokens() {
         tokenManager.removeRevokedTokens();
     }
