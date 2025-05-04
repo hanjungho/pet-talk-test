@@ -23,6 +23,7 @@ import org.springframework.security.web.authentication.SimpleUrlAuthenticationSu
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -42,110 +43,110 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     @Value("${front.url}")
     private String frontUrl;
 
-    @Override
-    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
-        log.info("OAuth2 로그인 성공! 인증 정보: {}", authentication);
+    private static class OAuth2UserInfo {
+        String provider;
+        String providerId;
+        String email;
+        String name;
+        PetUser existingUser;
+    }
 
-        // OAuth2User 정보 추출
+    private OAuth2UserInfo extractOAuth2UserInfo(Authentication authentication) {
         OAuth2AuthenticationToken authToken = (OAuth2AuthenticationToken) authentication;
         OAuth2User oAuth2User = authToken.getPrincipal();
-
         String registrationId = authToken.getAuthorizedClientRegistrationId();
-        String provider = null;
-        String providerId = null;
-        String email = null;
-        String name = null;
 
-        // CustomOAuth2User인 경우
+        OAuth2UserInfo userInfo = new OAuth2UserInfo();
+
         if (oAuth2User instanceof CustomOAuth2User) {
-            CustomOAuth2User customUser = (CustomOAuth2User) oAuth2User;
-
-            provider = customUser.getProvider();
-            providerId = customUser.getSocialId();
-            email = customUser.getEmail(); // getEmail() 메서드 사용
-            if (email == null) {
-                // attributes에서 이메일 검색 시도
-                if (customUser.getAttributes().containsKey("email")) {
-                    email = (String) customUser.getAttributes().get("email");
-                }
-            }
-            name = customUser.getName();
-
-            log.debug("CustomOAuth2User에서 정보 추출: provider={}, providerId={}, email={}, name={}",
-                    provider, providerId, email, name);
-
-            // 이미 가입한 사용자인 경우 바로 로그인
-            PetUser existingUser = userRepository.findByProviderAndSocialId(provider, providerId);
-            if (existingUser != null && existingUser.getNickname() != null) {
-                redirectWithTokens(response, existingUser);
-                return;
-            }
+            extractFromCustomOAuth2User((CustomOAuth2User) oAuth2User, userInfo);
+        } else {
+            extractFromGeneralOAuth2User(oAuth2User, registrationId, userInfo);
         }
-        // 일반 OAuth2User인 경우 - OAuth2UserServiceHelper 사용
-        else {
-            // 안전하게 맵 복사
-            Map<String, Object> attributes = new HashMap<>(oAuth2User.getAttributes());
 
-            // OAuth2 응답 정보 처리
-            OAuth2Response oAuth2Response = oAuth2UserServiceHelper.getOAuth2Response(registrationId, attributes);
+        findExistingUser(userInfo);
+        return userInfo;
+    }
 
-            if (oAuth2Response == null) {
-                log.error("OAuth2 응답 생성 실패: 제공자 = {}", registrationId);
-                response.sendError(HttpServletResponse.SC_BAD_REQUEST, "지원하지 않는 OAuth2 제공자입니다.");
-                return;
-            }
+    private void extractFromCustomOAuth2User(CustomOAuth2User customUser, OAuth2UserInfo userInfo) {
+        userInfo.provider = customUser.getProvider();
+        userInfo.providerId = customUser.getSocialId();
+        userInfo.email = extractEmail(customUser);
+        userInfo.name = customUser.getName();
 
-            provider = oAuth2Response.getProvider();
-            providerId = oAuth2Response.getProviderId();
-            email = oAuth2Response.getEmail();
-            name = oAuth2Response.getName();
+        log.debug("CustomOAuth2User에서 정보 추출: provider={}, providerId={}, email={}, name={}",
+                userInfo.provider, userInfo.providerId, userInfo.email, userInfo.name);
+    }
+
+    private String extractEmail(CustomOAuth2User customUser) {
+        String email = customUser.getEmail();
+        if (email == null && customUser.getAttributes().containsKey("email")) {
+            email = (String) customUser.getAttributes().get("email");
+        }
+        return email;
+    }
+
+    private void extractFromGeneralOAuth2User(OAuth2User oAuth2User, String registrationId, OAuth2UserInfo userInfo) {
+        Map<String, Object> attributes = new HashMap<>(oAuth2User.getAttributes());
+        OAuth2Response oAuth2Response = oAuth2UserServiceHelper.getOAuth2Response(registrationId, attributes);
+
+        if (oAuth2Response != null) {
+            userInfo.provider = oAuth2Response.getProvider();
+            userInfo.providerId = oAuth2Response.getProviderId();
+            userInfo.email = oAuth2Response.getEmail();
+            userInfo.name = oAuth2Response.getName();
 
             log.debug("OAuth2 사용자 정보: provider={}, id={}, email={}, name={}",
-                    provider, providerId, email, name);
-
-            // 이미 가입한 사용자인 경우 바로 로그인
-            PetUser existingUser = userRepository.findByProviderAndSocialId(provider, providerId);
-            if (existingUser != null && existingUser.getNickname() != null) {
-                redirectWithTokens(response, existingUser);
-                return;
-            }
+                    userInfo.provider, userInfo.providerId, userInfo.email, userInfo.name);
         }
+    }
 
-        // provider나 providerId가 null이면 오류 반환
-        if (provider == null || providerId == null) {
+    private void findExistingUser(OAuth2UserInfo userInfo) {
+        if (userInfo.provider != null && userInfo.providerId != null) {
+            userInfo.existingUser = userRepository.findByProviderAndSocialId(userInfo.provider, userInfo.providerId);
+        }
+    }
+
+    private boolean shouldRedirectWithTokens(OAuth2UserInfo userInfo) {
+        return userInfo.existingUser != null && userInfo.existingUser.getNickname() != null;
+    }
+
+    private boolean validateUserInfo(OAuth2UserInfo userInfo, HttpServletResponse response) throws IOException {
+        if (userInfo.provider == null || userInfo.providerId == null) {
             log.error("OAuth2 응답에 필수 정보가 누락되었습니다.");
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, "OAuth2 응답에 필수 정보가 누락되었습니다.");
-            return;
+            return false;
         }
+        return true;
+    }
 
-        // 임시 토큰 생성 (새 사용자 또는 추가 정보가 필요한 사용자)
-        String tempToken = jwtUtil.createTempToken(
-                provider,
-                providerId,
-                email,
-                name,
+    private String createTempToken(OAuth2UserInfo userInfo) {
+        return jwtUtil.createTempToken(
+                userInfo.provider,
+                userInfo.providerId,
+                userInfo.email,
+                userInfo.name,
                 30 * 60 * 1000L // 30분
         );
+    }
 
-        // 프론트엔드로 리다이렉트 (임시 토큰 포함 - 이 경우에는 URL에 토큰 필요)
+    private void redirectToRegister(HttpServletResponse response, String tempToken) throws IOException {
         String targetUrl = frontUrl + "/register?token=" + tempToken;
         log.debug("리다이렉트 주소: {}", targetUrl);
         response.sendRedirect(targetUrl);
     }
 
-    /**
-     * 사용자 인증 성공 후 토큰을 생성하고 프론트엔드로 리다이렉트합니다.
-     */
-    private void redirectWithTokens(HttpServletResponse response, PetUser user) throws IOException {
-        // 토큰 생성
-        TokenDTO tokens = jwtUtil.generateTokenPair(user);
-
-        // 응답 데이터 생성
+    private Map<String, Object> createResponseData(TokenDTO tokens, PetUser user) {
         Map<String, Object> responseData = new HashMap<>();
         responseData.put("accessToken", tokens.accessToken());
         responseData.put("refreshToken", tokens.refreshToken());
         responseData.put("expiresIn", tokens.expiresIn());
+        responseData.put("user", createUserDataMap(user));
 
+        return responseData;
+    }
+
+    private Map<String, Object> createUserDataMap(PetUser user) {
         Map<String, Object> userData = new HashMap<>();
         userData.put("id", user.getUserId());
         userData.put("email", user.getEmail());
@@ -154,16 +155,46 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         userData.put("profileImageUrl", user.getProfileImageUrl());
         userData.put("role", user.getRole());
 
-        responseData.put("user", userData);
+        return userData;
+    }
 
-        // 데이터를 JSON 문자열로 변환
+    private String encodeResponseData(Map<String, Object> responseData) throws IOException {
         String jsonData = objectMapper.writeValueAsString(responseData);
+        byte[] encodedBytes = Base64.getEncoder().encode(jsonData.getBytes(StandardCharsets.UTF_8));
+        return new String(encodedBytes, StandardCharsets.UTF_8);
+    }
 
-        // JSON 데이터를 Base64로 인코딩
-        String encodedData = Base64.getEncoder().encodeToString(jsonData.getBytes(StandardCharsets.UTF_8));
+    private String createTargetUrl(String encodedData) throws UnsupportedEncodingException {
+        return frontUrl + "/oauth/callback?data=" + URLEncoder.encode(encodedData, StandardCharsets.UTF_8);
+    }
 
-        // URL에 인코딩된 데이터 추가
-        String targetUrl = frontUrl + "/oauth/callback?data=" + URLEncoder.encode(encodedData, StandardCharsets.UTF_8);
+    @Override
+    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
+        log.info("OAuth2 로그인 성공! 인증 정보: {}", authentication);
+
+        OAuth2UserInfo userInfo = extractOAuth2UserInfo(authentication);
+
+        if (shouldRedirectWithTokens(userInfo)) {
+            redirectWithTokens(response, userInfo.existingUser);
+            return;
+        }
+
+        if (!validateUserInfo(userInfo, response)) {
+            return;
+        }
+
+        String tempToken = createTempToken(userInfo);
+        redirectToRegister(response, tempToken);
+    }
+
+    /**
+     * 사용자 인증 성공 후 토큰을 생성하고 프론트엔드로 리다이렉트합니다.
+     */
+    private void redirectWithTokens(HttpServletResponse response, PetUser user) throws IOException {
+        TokenDTO tokens = jwtUtil.generateTokenPair(user);
+        Map<String, Object> responseData = createResponseData(tokens, user);
+        String encodedData = encodeResponseData(responseData);
+        String targetUrl = createTargetUrl(encodedData);
 
         response.sendRedirect(targetUrl);
     }

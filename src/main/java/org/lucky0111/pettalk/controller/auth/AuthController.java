@@ -83,6 +83,103 @@ public class AuthController {
         return responseData;
     }
 
+    private String decodeOAuthData(String encodedData) {
+        log.debug("Received encoded data: {}", encodedData);
+
+        String urlDecodedData = performUrlDecoding(encodedData);
+        String base64DecodedData = performBase64Decoding(urlDecodedData);
+
+        return base64DecodedData;
+    }
+
+    private String performUrlDecoding(String encodedData) {
+        String urlDecodedData = URLDecoder.decode(encodedData, StandardCharsets.UTF_8);
+        urlDecodedData = URLDecoder.decode(urlDecodedData, StandardCharsets.UTF_8);
+        log.debug("After URL decoding: {}", urlDecodedData);
+        return urlDecodedData;
+    }
+
+    private String performBase64Decoding(String urlDecodedData) {
+        byte[] decodedBytes = Base64.getDecoder().decode(urlDecodedData);
+        String jsonData = new String(decodedBytes, StandardCharsets.UTF_8);
+        log.debug("Decoded JSON: {}", jsonData);
+        return jsonData;
+    }
+
+    private Map<String, Object> parseUserData(String jsonData) {
+        try {
+            return objectMapper.readValue(jsonData, Map.class);
+        } catch (Exception e) {
+            throw new CustomException("JSON 파싱 중 오류가 발생했습니다.", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private UUID extractUserId(Map<String, Object> userData) {
+        Map<String, Object> userInfo = (Map<String, Object>) userData.get("user");
+
+        if (userInfo == null || userInfo.get("id") == null) {
+            throw new CustomException("유효하지 않은 사용자 정보입니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        return UUID.fromString(userInfo.get("id").toString());
+    }
+
+    private PetUser findAndValidateUser(UUID userId) {
+        PetUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
+
+        validateUserStatus(user);
+        return user;
+    }
+
+    private void validateUserStatus(PetUser user) {
+        if (!"ACTIVE".equals(user.getStatus())) {
+            throw new CustomException("비활성화된 사용자입니다.", HttpStatus.FORBIDDEN);
+        }
+    }
+
+    private Map<String, Object> createLoginResponse(Map<String, Object> userData) {
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("accessToken", getUserDataValue(userData, "accessToken"));
+        responseData.put("refreshToken", getUserDataValue(userData, "refreshToken"));
+        responseData.put("expiresIn", getUserDataExpiresIn(userData));
+        responseData.put("user", userData.get("user"));
+        return responseData;
+    }
+
+    private String getUserDataValue(Map<String, Object> userData, String key) {
+        return (String) userData.get(key);
+    }
+
+    private Long getUserDataExpiresIn(Map<String, Object> userData) {
+        return ((Number) userData.get("expiresIn")).longValue();
+    }
+
+    private String validateRefreshToken(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new CustomException("리프레시 토큰이 필요합니다.", HttpStatus.BAD_REQUEST);
+        }
+        return refreshToken;
+    }
+
+    private TokenDTO performTokenRefresh(String refreshToken) {
+        Optional<TokenDTO> optionalTokenDTO = jwtUtil.refreshAccessToken(refreshToken);
+
+        if (optionalTokenDTO.isPresent()) {
+            return optionalTokenDTO.get();
+        } else {
+            throw new CustomException("유효하지 않은 리프레시 토큰입니다.", HttpStatus.UNAUTHORIZED);
+        }
+    }
+
+    private Map<String, Object> createTokenResponse(TokenDTO tokenDTO) {
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("accessToken", tokenDTO.accessToken());
+        responseData.put("refreshToken", tokenDTO.refreshToken());
+        responseData.put("expiresIn", tokenDTO.expiresIn());
+        return responseData;
+    }
+
     // Private helper methods
     private PetUser findOrCreateUser(OAuthTempTokenDTO tempTokenInfo, UserRegistrationDTO registrationDTO) {
         // 소셜 ID로 이미 존재하는 사용자 확인
@@ -170,25 +267,11 @@ public class AuthController {
     @PostMapping("/refresh")
     public ResponseEntity<?> refreshToken(@RequestBody TokenRequestDTO request) {
         try {
-            String refreshToken = request.refreshToken();
+            String refreshToken = validateRefreshToken(request.refreshToken());
+            TokenDTO tokenDTO = performTokenRefresh(refreshToken);
+            Map<String, Object> responseData = createTokenResponse(tokenDTO);
 
-            if (refreshToken == null || refreshToken.isBlank()) {
-                throw new CustomException("리프레시 토큰이 필요합니다.", HttpStatus.BAD_REQUEST);
-            }
-
-            Optional<TokenDTO> optionalTokenDTO = jwtUtil.refreshAccessToken(refreshToken);
-
-            if (optionalTokenDTO.isPresent()) {
-                TokenDTO tokenDTO = optionalTokenDTO.get();
-                Map<String, Object> responseData = new HashMap<>();
-                responseData.put("accessToken", tokenDTO.accessToken());
-                responseData.put("refreshToken", tokenDTO.refreshToken());
-                responseData.put("expiresIn", tokenDTO.expiresIn());
-
-                return responseService.createSuccessResponse(responseData, "토큰이 갱신되었습니다.");
-            } else {
-                throw new CustomException("유효하지 않은 리프레시 토큰입니다.", HttpStatus.UNAUTHORIZED);
-            }
+            return responseService.createSuccessResponse(responseData, "토큰이 갱신되었습니다.");
         } catch (CustomException e) {
             return responseService.createErrorResponse(e.getHttpStatus().name(), e.getMessage());
         } catch (Exception e) {
@@ -312,57 +395,15 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> loginWithOAuthData(@RequestBody LoginDTO loginDTO) {
         try {
-            String encodedData = loginDTO.encodedData();
-            log.debug("Received encoded data: {}", encodedData);
+            String decodedJsonData = decodeOAuthData(loginDTO.encodedData());
+            Map<String, Object> userData = parseUserData(decodedJsonData);
 
-            // URL 디코딩 두 번 수행 (이중 URL 인코딩 처리)
-            String urlDecodedData = URLDecoder.decode(encodedData, StandardCharsets.UTF_8);
-            urlDecodedData = URLDecoder.decode(urlDecodedData, StandardCharsets.UTF_8);
+            UUID userId = extractUserId(userData);
+            PetUser user = findAndValidateUser(userId);
 
-            log.debug("After URL decoding: {}", urlDecodedData);
-
-            // Base64 디코딩
-            byte[] decodedBytes = Base64.getDecoder().decode(urlDecodedData);
-            String jsonData = new String(decodedBytes, StandardCharsets.UTF_8);
-
-            log.debug("Decoded JSON: {}", jsonData);
-
-            // JSON 파싱
-            Map<String, Object> userData = objectMapper.readValue(jsonData, Map.class);
-
-            // 사용자 정보 추출
-            Map<String, Object> userInfo = (Map<String, Object>) userData.get("user");
-
-            if (userInfo == null || userInfo.get("id") == null) {
-                throw new CustomException("유효하지 않은 사용자 정보입니다.", HttpStatus.BAD_REQUEST);
-            }
-
-            // 사용자 ID를 UUID로 변환
-            UUID userId = UUID.fromString(userInfo.get("id").toString());
-
-            // 데이터베이스에서 사용자 조회
-            PetUser user = userRepository.findById(userId)
-                    .orElseThrow(() -> new CustomException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
-
-            // 사용자 상태 확인
-            if (!"ACTIVE".equals(user.getStatus())) {
-                throw new CustomException("비활성화된 사용자입니다.", HttpStatus.FORBIDDEN);
-            }
-
-            // 기존에 제공된 토큰 사용
-            String accessToken = (String) userData.get("accessToken");
-            String refreshToken = (String) userData.get("refreshToken");
-            Long expiresIn = ((Number) userData.get("expiresIn")).longValue();
-
-            // 응답 데이터 생성
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("accessToken", accessToken);
-            responseData.put("refreshToken", refreshToken);
-            responseData.put("expiresIn", expiresIn);
-            responseData.put("user", userInfo);
+            Map<String, Object> responseData = createLoginResponse(userData);
 
             return responseService.createSuccessResponse(responseData, "로그인이 성공적으로 처리되었습니다.");
-
         } catch (CustomException e) {
             return responseService.createErrorResponse(e.getHttpStatus().name(), e.getMessage());
         } catch (Exception e) {
