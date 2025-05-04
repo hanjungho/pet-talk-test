@@ -21,9 +21,6 @@ public class JWTTokenProvider {
 
     private final SecretKey secretKey;
 
-    @Value("${spring.jwt.access-token-expiration-ms:3600000}")
-    private Long accessTokenExpirationMs; // Default 1 hour
-
     public JWTTokenProvider(@Value("${spring.jwt.secret}") String secret) {
         this.secretKey = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8),
                 Jwts.SIG.HS256.key().build().getAlgorithm());
@@ -34,22 +31,13 @@ public class JWTTokenProvider {
      */
     public String createJwt(String provider, String socialId, UUID userId, String role, Long expiredMs) {
         log.debug("JWT 토큰 생성 - 사용자: {} {}, 역할: {}", provider, socialId, role);
-        try {
-            String token = Jwts.builder()
-                    .claim("provider", provider)
-                    .claim("socialId", socialId)
-                    .claim("userId", userId.toString())
-                    .claim("role", role)
-                    .issuedAt(new Date(System.currentTimeMillis()))
-                    .expiration(new Date(System.currentTimeMillis() + expiredMs))
-                    .signWith(secretKey)
-                    .compact();
-            log.debug("JWT 토큰 생성 성공");
-            return token;
-        } catch (Exception e) {
-            log.error("JWT 토큰 생성 중 오류 발생: {}", e.getMessage());
-            return null;
-        }
+        return buildToken(builder ->
+                        builder.claim("provider", provider)
+                                .claim("socialId", socialId)
+                                .claim("userId", userId.toString())
+                                .claim("role", role),
+                expiredMs
+        );
     }
 
     /**
@@ -57,23 +45,14 @@ public class JWTTokenProvider {
      */
     public String createJwtWithEmail(String provider, String socialId, UUID userId, String role, String email, Long expiredMs) {
         log.debug("JWT 토큰 생성 - 사용자: {} {}, 역할: {}, 이메일: {}", provider, socialId, role, email);
-        try {
-            String token = Jwts.builder()
-                    .claim("provider", provider)
-                    .claim("socialId", socialId)
-                    .claim("userId", userId.toString())
-                    .claim("role", role)
-                    .claim("email", email)
-                    .issuedAt(new Date(System.currentTimeMillis()))
-                    .expiration(new Date(System.currentTimeMillis() + expiredMs))
-                    .signWith(secretKey)
-                    .compact();
-            log.debug("JWT 토큰 생성 성공");
-            return token;
-        } catch (Exception e) {
-            log.error("JWT 토큰 생성 중 오류 발생: {}", e.getMessage());
-            return null;
-        }
+        return buildToken(builder ->
+                        builder.claim("provider", provider)
+                                .claim("socialId", socialId)
+                                .claim("userId", userId.toString())
+                                .claim("role", role)
+                                .claim("email", email),
+                expiredMs
+        );
     }
 
     /**
@@ -81,23 +60,37 @@ public class JWTTokenProvider {
      */
     public String createTempToken(String provider, String providerId, String email, String name, Long expiredMs) {
         log.debug("임시 인증 토큰 생성 - 제공자: {}, providerId: {}, email: {}", provider, providerId, email);
+        return buildToken(builder ->
+                        builder.claim("provider", provider)
+                                .claim("providerId", providerId)
+                                .claim("email", email)
+                                .claim("name", name)
+                                .claim("registrationCompleted", false),
+                expiredMs
+        );
+    }
+
+    /**
+     * 토큰 빌더를 사용하여 공통 토큰 생성 로직
+     */
+    private String buildToken(TokenBuilderCustomizer customizer, Long expiredMs) {
         try {
-            String token = Jwts.builder()
-                    .claim("provider", provider)
-                    .claim("providerId", providerId)
-                    .claim("email", email)
-                    .claim("name", name)
-                    .claim("registrationCompleted", false)
+            var builder = Jwts.builder();
+            customizer.customize(builder);
+            return builder
                     .issuedAt(new Date(System.currentTimeMillis()))
                     .expiration(new Date(System.currentTimeMillis() + expiredMs))
                     .signWith(secretKey)
                     .compact();
-            log.debug("임시 인증 토큰 생성 성공");
-            return token;
         } catch (Exception e) {
-            log.error("임시 인증 토큰 생성 중 오류 발생: {}", e.getMessage());
+            log.error("JWT 토큰 생성 중 오류 발생: {}", e.getMessage());
             return null;
         }
+    }
+
+    @FunctionalInterface
+    private interface TokenBuilderCustomizer {
+        void customize(io.jsonwebtoken.JwtBuilder builder);
     }
 
     /**
@@ -123,7 +116,6 @@ public class JWTTokenProvider {
         try {
             Claims claims = extractAllClaims(token);
             if (claims == null) return true;
-
             return claims.getExpiration().before(new Date());
         } catch (Exception e) {
             log.error("토큰 만료 확인 중 오류 발생: {}", e.getMessage());
@@ -138,10 +130,8 @@ public class JWTTokenProvider {
         try {
             Claims claims = extractAllClaims(token);
             if (claims == null) return 0;
-
             Date expiration = claims.getExpiration();
             Date now = new Date();
-
             long diff = expiration.getTime() - now.getTime();
             return Math.max(0, diff / 1000);
         } catch (Exception e) {
@@ -150,46 +140,19 @@ public class JWTTokenProvider {
         }
     }
 
-    /**
-     * 토큰에서 provider를 추출합니다.
-     */
-    public String getProvider(String token) {
-        Claims claims = extractAllClaims(token);
-        return claims != null ? claims.get("provider", String.class) : null;
-    }
+    // 토큰 정보 추출 메서드들
+    public String getProvider(String token) { return getClaimValue(token, "provider"); }
+    public String getSocialId(String token) { return getClaimValue(token, "socialId"); }
+    public String getRole(String token) { return getClaimValue(token, "role"); }
+    public String getEmail(String token) { return getClaimValue(token, "email"); }
 
-    /**
-     * 토큰에서 socialId를 추출합니다.
-     */
-    public String getSocialId(String token) {
-        Claims claims = extractAllClaims(token);
-        return claims != null ? claims.get("socialId", String.class) : null;
-    }
-
-    /**
-     * 토큰에서 role을 추출합니다.
-     */
-    public String getRole(String token) {
-        Claims claims = extractAllClaims(token);
-        return claims != null ? claims.get("role", String.class) : null;
-    }
-
-    /**
-     * 토큰에서 userId를 추출합니다.
-     */
     public UUID getUserId(String token) {
-        Claims claims = extractAllClaims(token);
-        if (claims == null) return null;
-
-        String userIdStr = claims.get("userId", String.class);
+        String userIdStr = getClaimValue(token, "userId");
         return userIdStr != null ? UUID.fromString(userIdStr) : null;
     }
 
-    /**
-     * 토큰에서 email을 추출합니다.
-     */
-    public String getEmail(String token) {
+    private String getClaimValue(String token, String claimName) {
         Claims claims = extractAllClaims(token);
-        return claims != null ? claims.get("email", String.class) : null;
+        return claims != null ? claims.get(claimName, String.class) : null;
     }
 }

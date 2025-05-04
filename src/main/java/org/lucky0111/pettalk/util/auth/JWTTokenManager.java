@@ -26,38 +26,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JWTTokenManager {
 
-    private final JWTTokenProvider tokenProvider;
     private final RefreshTokenRepository refreshTokenRepository;
-
-    @Value("${spring.jwt.access-token-expiration-ms:3600000}")
-    private Long accessTokenExpirationMs; // Default 1 hour
 
     @Value("${spring.jwt.refresh-token-expiration-days:30}")
     private Integer refreshTokenExpirationDays; // Default 30 days
-
-    /**
-     * 임시 토큰 정보를 추출합니다.
-     */
-    public OAuthTempTokenDTO getTempTokenInfo(String token) {
-        try {
-            var claims = tokenProvider.extractAllClaims(token);
-            if (claims == null) return null;
-
-            String email = claims.get("email", String.class);
-            log.debug("토큰에서 추출한 이메일: {}", email);
-
-            return OAuthTempTokenDTO.builder()
-                    .provider(claims.get("provider", String.class))
-                    .providerId(claims.get("providerId", String.class))
-                    .email(email)
-                    .name(claims.get("name", String.class))
-                    .registrationCompleted(claims.get("registrationCompleted", Boolean.class))
-                    .build();
-        } catch (Exception e) {
-            log.error("임시 토큰 파싱 중 오류 발생: {}", e.getMessage());
-            return null;
-        }
-    }
 
     /**
      * 새 리프레시 토큰을 생성합니다.
@@ -69,7 +41,6 @@ public class JWTTokenManager {
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
 
         LocalDateTime expiryDate = LocalDateTime.now().plus(refreshTokenExpirationDays, ChronoUnit.DAYS);
-
         RefreshToken refreshToken = new RefreshToken(token, user, expiryDate);
         refreshTokenRepository.save(refreshToken);
 
@@ -77,65 +48,12 @@ public class JWTTokenManager {
     }
 
     /**
-     * 액세스 토큰과 리프레시 토큰을 생성합니다.
+     * 리프레시 토큰을 검증하고 반환합니다.
      */
     @Transactional
-    public TokenDTO generateTokenPair(PetUser user) {
-        String accessToken;
-        if (user.getEmail() != null) {
-            accessToken = tokenProvider.createJwtWithEmail(
-                    user.getProvider(),
-                    user.getSocialId(),
-                    user.getUserId(),
-                    user.getRole(),
-                    user.getEmail(),
-                    accessTokenExpirationMs);
-        } else {
-            accessToken = tokenProvider.createJwt(
-                    user.getProvider(),
-                    user.getSocialId(),
-                    user.getUserId(),
-                    user.getRole(),
-                    accessTokenExpirationMs);
-        }
-
-        String refreshToken = generateRefreshToken(user);
-
-        return new TokenDTO(accessToken, refreshToken, accessTokenExpirationMs / 1000);
-    }
-
-    /**
-     * 리프레시 토큰을 검증하고 새 액세스 토큰을 생성합니다.
-     */
-    @Transactional
-    public Optional<TokenDTO> refreshAccessToken(String refreshToken) {
-        return refreshTokenRepository.findByToken(refreshToken)
-                .filter(RefreshToken::isValid)
-                .map(token -> {
-                    PetUser user = token.getUser();
-
-                    // Create new access token with email
-                    String newAccessToken;
-                    if (user.getEmail() != null) {
-                        newAccessToken = tokenProvider.createJwtWithEmail(
-                                user.getProvider(),
-                                user.getSocialId(),
-                                user.getUserId(),
-                                user.getRole(),
-                                user.getEmail(),
-                                accessTokenExpirationMs);
-                    } else {
-                        newAccessToken = tokenProvider.createJwt(
-                                user.getProvider(),
-                                user.getSocialId(),
-                                user.getUserId(),
-                                user.getRole(),
-                                accessTokenExpirationMs);
-                    }
-
-                    // Return tokens
-                    return new TokenDTO(newAccessToken, refreshToken, accessTokenExpirationMs / 1000);
-                });
+    public Optional<RefreshToken> validateAndGetRefreshToken(String token) {
+        return refreshTokenRepository.findByToken(token)
+                .filter(RefreshToken::isValid);
     }
 
     /**
@@ -168,6 +86,9 @@ public class JWTTokenManager {
         refreshTokenRepository.deleteAllExpiredTokens(LocalDateTime.now());
     }
 
+    /**
+     * 폐기된 토큰을 제거합니다.
+     */
     @Transactional
     public void removeRevokedTokens() {
         refreshTokenRepository.deleteAllRevokedTokens();
