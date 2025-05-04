@@ -11,6 +11,7 @@ import org.lucky0111.pettalk.exception.CustomException;
 import org.lucky0111.pettalk.repository.user.PetUserRepository;
 import org.lucky0111.pettalk.service.auth.ResponseService;
 import org.lucky0111.pettalk.service.user.UserService;
+import org.lucky0111.pettalk.util.auth.AuthServiceHelper;
 import org.lucky0111.pettalk.util.auth.JWTUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,30 +34,19 @@ public class AuthController {
     private final ResponseService responseService;
     private final UserService userService;
     private final ObjectMapper objectMapper;
+    private final AuthServiceHelper authHelper;
 
     @GetMapping("/user-info")
     public ResponseEntity<?> getUserInfo(HttpServletRequest request) {
         try {
-            // 현재 인증된 사용자 정보 가져오기
-            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            authHelper.validateAuthentication();
 
-            if (authentication == null || !authentication.isAuthenticated()) {
-                throw new CustomException("인증 정보가 없습니다.", HttpStatus.UNAUTHORIZED);
-            }
-
-            // JWT 토큰에서 사용자 ID 추출
-            UUID userId = jwtUtil.getUserId(extractJwtToken(request));
-
-            if (userId == null) {
-                throw new CustomException("유효하지 않은 토큰입니다.", HttpStatus.UNAUTHORIZED);
-            }
-
-            // 사용자 정보 조회
+            UUID userId = authHelper.getCurrentUserUUID(request);
             PetUser user = userRepository.findById(userId)
                     .orElseThrow(() -> new CustomException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
 
             // 응답 데이터 생성
-            Map<String, Object> userData = createUserDataMap(user);
+            Map<String, Object> userData = authHelper.createUserDataMap(user);
 
             return responseService.createSuccessResponse(userData, "사용자 정보를 성공적으로 가져왔습니다.");
         } catch (CustomException e) {
@@ -65,15 +55,6 @@ public class AuthController {
             log.error("사용자 정보 조회 중 오류 발생: ", e);
             return responseService.createErrorResponse("SERVER_ERROR", "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
         }
-    }
-
-    // JWT 토큰 추출 헬퍼 메서드
-    private String extractJwtToken(HttpServletRequest request) {
-        String bearerToken = request.getHeader("Authorization");
-        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7);
-        }
-        return null;
     }
 
     @PostMapping("/register")
@@ -86,36 +67,7 @@ public class AuthController {
                 throw new CustomException("유효하지 않은 임시 토큰입니다.", HttpStatus.BAD_REQUEST);
             }
 
-            // 소셜 ID로 이미 존재하는 사용자 확인
-            PetUser existingUser = userRepository.findByProviderAndSocialId(
-                    tempTokenInfo.provider(), tempTokenInfo.providerId());
-
-            PetUser petUser;
-
-            if (existingUser != null) {
-                // 기존 사용자 정보 업데이트
-                petUser = existingUser;
-                petUser.setName(registrationDTO.name());
-                petUser.setNickname(registrationDTO.nickname());
-                petUser.setProfileImageUrl(registrationDTO.profileImageUrl());
-
-                log.info("기존 사용자 정보 업데이트: {}, {}", petUser.getUserId(), petUser.getName());
-            } else {
-                // 새 사용자 생성
-                petUser = new PetUser();
-                petUser.setProvider(tempTokenInfo.provider());
-                petUser.setSocialId(tempTokenInfo.providerId());
-                petUser.setEmail(tempTokenInfo.email());
-                petUser.setName(registrationDTO.name());
-                petUser.setNickname(registrationDTO.nickname());
-                petUser.setProfileImageUrl(registrationDTO.profileImageUrl());
-                petUser.setRole("USER");
-                petUser.setStatus("ACTIVE");
-
-                log.info("새 사용자 정보 생성: {}, {}, {}",
-                        petUser.getName(), petUser.getProvider(), petUser.getSocialId());
-            }
-
+            PetUser petUser = findOrCreateUser(tempTokenInfo, registrationDTO);
             userRepository.save(petUser);
 
             // Generate JWT token pair (access + refresh)
@@ -126,7 +78,7 @@ public class AuthController {
             responseData.put("accessToken", tokens.accessToken());
             responseData.put("refreshToken", tokens.refreshToken());
             responseData.put("expiresIn", tokens.expiresIn());
-            responseData.put("user", createUserDataMap(petUser));
+            responseData.put("user", authHelper.createUserDataMap(petUser));
 
             return responseService.createSuccessResponse(responseData, "사용자 등록이 완료되었습니다.");
         } catch (CustomException e) {
@@ -211,7 +163,7 @@ public class AuthController {
     @PostMapping("/withdraw")
     public ResponseEntity<?> withdrawUser(HttpServletRequest request) {
         try {
-            UUID userId = validateTokenAndGetUserId(request);
+            UUID userId = authHelper.getCurrentUserUUID(request);
 
             // 사용자 탈퇴 처리 서비스 호출
             boolean withdrawn = userService.withdrawUser(userId);
@@ -235,9 +187,9 @@ public class AuthController {
     @PutMapping("/profile")
     public ResponseEntity<?> updateProfile(HttpServletRequest request, @RequestBody ProfileUpdateDTO profileUpdateDTO) {
         try {
-            UUID userId = validateTokenAndGetUserId(request);
+            UUID userId = authHelper.getCurrentUserUUID(request);
 
-            // 닉네임 중복 확인 (현재 사용자와 동일한 닉네임은 제외)
+            // 닉네임 중복 확인
             if (profileUpdateDTO.nickname() != null && !profileUpdateDTO.nickname().isBlank()) {
                 PetUser currentUser = userRepository.findById(userId).orElse(null);
                 if (currentUser != null &&
@@ -252,7 +204,7 @@ public class AuthController {
 
             if (updatedUser != null) {
                 // 응답 데이터 생성
-                Map<String, Object> userData = createUserDataMap(updatedUser);
+                Map<String, Object> userData = authHelper.createUserDataMap(updatedUser);
                 return responseService.createSuccessResponse(userData, "프로필 정보가 성공적으로 업데이트되었습니다.");
             } else {
                 throw new CustomException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
@@ -268,7 +220,7 @@ public class AuthController {
     @GetMapping("/token/validate")
     public ResponseEntity<?> validateToken(HttpServletRequest request) {
         try {
-            String token = extractJwtToken(request);
+            String token = authHelper.extractJwtToken(request);
 
             if (token == null) {
                 throw new CustomException("토큰을 찾을 수 없습니다.", HttpStatus.BAD_REQUEST);
@@ -358,40 +310,38 @@ public class AuthController {
         }
     }
 
-    /**
-     * 사용자 정보를 맵으로 변환합니다.
-     */
-    private Map<String, Object> createUserDataMap(PetUser user) {
-        Map<String, Object> userData = new HashMap<>();
-        userData.put("id", user.getUserId());
-        userData.put("email", user.getEmail());
-        userData.put("name", user.getName());
-        userData.put("nickname", user.getNickname());
-        userData.put("profileImageUrl", user.getProfileImageUrl());
-        userData.put("role", user.getRole());
-        return userData;
-    }
+    // Private helper methods
+    private PetUser findOrCreateUser(OAuthTempTokenDTO tempTokenInfo, UserRegistrationDTO registrationDTO) {
+        // 소셜 ID로 이미 존재하는 사용자 확인
+        PetUser existingUser = userRepository.findByProviderAndSocialId(
+                tempTokenInfo.provider(), tempTokenInfo.providerId());
 
-    /**
-     * 토큰을 검증하고 사용자 ID를 반환합니다.
-     */
-    private UUID validateTokenAndGetUserId(HttpServletRequest request) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        PetUser petUser;
 
-        if (authentication == null || !authentication.isAuthenticated()) {
-            throw new CustomException("인증 정보가 없습니다.", HttpStatus.UNAUTHORIZED);
+        if (existingUser != null) {
+            // 기존 사용자 정보 업데이트
+            petUser = existingUser;
+            petUser.setName(registrationDTO.name());
+            petUser.setNickname(registrationDTO.nickname());
+            petUser.setProfileImageUrl(registrationDTO.profileImageUrl());
+
+            log.info("기존 사용자 정보 업데이트: {}, {}", petUser.getUserId(), petUser.getName());
+        } else {
+            // 새 사용자 생성
+            petUser = new PetUser();
+            petUser.setProvider(tempTokenInfo.provider());
+            petUser.setSocialId(tempTokenInfo.providerId());
+            petUser.setEmail(tempTokenInfo.email());
+            petUser.setName(registrationDTO.name());
+            petUser.setNickname(registrationDTO.nickname());
+            petUser.setProfileImageUrl(registrationDTO.profileImageUrl());
+            petUser.setRole("USER");
+            petUser.setStatus("ACTIVE");
+
+            log.info("새 사용자 정보 생성: {}, {}, {}",
+                    petUser.getName(), petUser.getProvider(), petUser.getSocialId());
         }
 
-        String token = extractJwtToken(request);
-        if (token == null) {
-            throw new CustomException("유효하지 않은 토큰입니다.", HttpStatus.UNAUTHORIZED);
-        }
-
-        UUID userId = jwtUtil.getUserId(token);
-        if (userId == null) {
-            throw new CustomException("유효하지 않은 토큰입니다.", HttpStatus.UNAUTHORIZED);
-        }
-
-        return userId;
+        return petUser;
     }
 }
