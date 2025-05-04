@@ -87,7 +87,7 @@ public class TrainerServiceImpl implements TrainerService {
         PetUser petUser = petUserRepository.findById(userId)
                 .orElseThrow(() -> new CustomException("User not found with id: %s".formatted(userId), HttpStatus.NOT_FOUND));
         //조회된 PetUser의 현재 상태(역할)를 확인하여 이미 훈련사이거나 신청 대기 중이라면 중복 신청 예외를 발생시킵니다.
-        if(petUser.getRole().equals("trainer") || petUser.getRole().equals("admin")) {
+        if(petUser.getRole().equals("TRAINER") || petUser.getRole().equals("ADMIN")) {
             throw new DuplicateRequestException("User has already applied or already a trainer");
         }
         //TrainerRepository를 사용하여 해당 PetUser에 연결된 Trainer 엔티티가 이미 있는지 조회합니다.
@@ -167,7 +167,7 @@ public class TrainerServiceImpl implements TrainerService {
             trainerRepository.save(trainer);
 
          //PetUser 역할 업데이트: PetUser 엔티티의 role 필드를 'trainer' 또는 그에 준하는 상태로 업데이트하고 petUserRepository.save(petUser);로 저장합니다.
-        petUser.setRole("trainer");
+        petUser.setRole("TRAINER");
         petUserRepository.save(petUser);
 
     }

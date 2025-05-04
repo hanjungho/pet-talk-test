@@ -109,7 +109,7 @@ public class AuthController {
                 petUser.setName(registrationDTO.name());
                 petUser.setNickname(registrationDTO.nickname());
                 petUser.setProfileImageUrl(registrationDTO.profileImageUrl());
-                petUser.setRole("ROLE_USER");
+                petUser.setRole("USER");
                 petUser.setStatus("ACTIVE");
 
                 log.info("새 사용자 정보 생성: {}, {}, {}",

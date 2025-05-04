@@ -121,4 +121,8 @@ public class JWTUtil {
     public void removeExpiredTokens() {
         tokenManager.removeExpiredTokens();
     }
+
+    public void removeRevokedTokens() {
+        tokenManager.removeRevokedTokens();
+    }
 }

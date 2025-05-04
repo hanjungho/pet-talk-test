@@ -15,10 +15,10 @@ public class TokenCleanupScheduler {
         this.jwtUtil = jwtUtil;
     }
 
-    // Run every day at 2 AM
     @Scheduled(cron = "0 0 2 * * ?")
-    public void cleanupExpiredTokens() {
-        System.out.println("Running scheduled task to clean up expired refresh tokens");
+    public void cleanupTokens() {
+        System.out.println("Running scheduled task to clean up expired and revoked refresh tokens");
         jwtUtil.removeExpiredTokens();
+        jwtUtil.removeRevokedTokens(); // 폐기된 토큰도 정리
     }
 }

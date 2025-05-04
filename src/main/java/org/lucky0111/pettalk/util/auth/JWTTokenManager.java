@@ -167,4 +167,9 @@ public class JWTTokenManager {
     public void removeExpiredTokens() {
         refreshTokenRepository.deleteAllExpiredTokens(LocalDateTime.now());
     }
+
+    @Transactional
+    public void removeRevokedTokens() {
+        refreshTokenRepository.deleteAllRevokedTokens();
+    }
 }
