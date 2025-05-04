@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lucky0111.pettalk.domain.entity.user.PetUser;
 import org.lucky0111.pettalk.exception.CustomException;
-import org.lucky0111.pettalk.repository.user.PetUserRepository;
+import org.lucky0111.pettalk.service.user.CommonUserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,60 +21,21 @@ import java.util.UUID;
 public class AuthServiceHelper {
 
     private final JWTUtil jwtUtil;
-    private final PetUserRepository userRepository;
+    private final CommonUserService commonUserService;
+    private final TokenUtils tokenUtils;
 
     /**
      * JWT 토큰 추출
      */
     public String extractJwtToken(HttpServletRequest request) {
-        String bearerToken = extractBearerToken(request);
-        return extractTokenFromBearer(bearerToken);
-    }
-
-    /**
-     * Authorization 헤더에서 Bearer 토큰 추출
-     */
-    private String extractBearerToken(HttpServletRequest request) {
-        return request.getHeader("Authorization");
-    }
-
-    /**
-     * Bearer 토큰에서 실제 토큰 값만 추출
-     */
-    private String extractTokenFromBearer(String bearerToken) {
-        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7);
-        }
-        return null;
+        return tokenUtils.extractJwtToken(request);
     }
 
     /**
      * 현재 인증된 사용자의 UUID 가져오기
      */
     public UUID getCurrentUserUUID(HttpServletRequest request) {
-        String token = extractJwtToken(request);
-        validateToken(token);
-        return extractUserId(token);
-    }
-
-    /**
-     * 토큰 유효성 검증
-     */
-    private void validateToken(String token) {
-        if (token == null) {
-            throw new CustomException("인증 토큰을 찾을 수 없습니다.", HttpStatus.UNAUTHORIZED);
-        }
-    }
-
-    /**
-     * 토큰에서 사용자 ID 추출
-     */
-    private UUID extractUserId(String token) {
-        UUID userId = jwtUtil.getUserId(token);
-        if (userId == null) {
-            throw new CustomException("유효하지 않은 토큰입니다.", HttpStatus.UNAUTHORIZED);
-        }
-        return userId;
+        return tokenUtils.getCurrentUserUUID(request);
     }
 
     /**
@@ -82,15 +43,7 @@ public class AuthServiceHelper {
      */
     public PetUser getCurrentUser(HttpServletRequest request) {
         UUID currentUserUUID = getCurrentUserUUID(request);
-        return findUserByUUID(currentUserUUID);
-    }
-
-    /**
-     * UUID로 사용자 조회
-     */
-    private PetUser findUserByUUID(UUID userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new CustomException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        return commonUserService.findUserByIdOrThrow(currentUserUUID);
     }
 
     /**

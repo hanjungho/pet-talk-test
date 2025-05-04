@@ -10,9 +10,11 @@ import org.lucky0111.pettalk.domain.entity.user.PetUser;
 import org.lucky0111.pettalk.exception.CustomException;
 import org.lucky0111.pettalk.repository.user.PetUserRepository;
 import org.lucky0111.pettalk.service.auth.ResponseService;
+import org.lucky0111.pettalk.service.user.CommonUserService;
 import org.lucky0111.pettalk.service.user.UserService;
 import org.lucky0111.pettalk.util.auth.AuthServiceHelper;
 import org.lucky0111.pettalk.util.auth.JWTUtil;
+import org.lucky0111.pettalk.util.auth.TokenUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -33,15 +35,28 @@ public class AuthController {
     private final UserService userService;
     private final ObjectMapper objectMapper;
     private final AuthServiceHelper authHelper;
+    private final TokenUtils tokenUtils;
+    private final CommonUserService commonUserService;
 
-    private PetUser findUserById(UUID userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new CustomException("사용자를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-    }
-
-    private ResponseEntity<?> handleGenericError(Exception e, String operation) {
+    // 통합된 에러 처리 메서드
+    private ResponseEntity<?> handleUnexpectedError(Exception e, String operation) {
         log.error("{} 중 오류 발생: ", operation, e);
         return responseService.createErrorResponse("SERVER_ERROR", "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+
+    // 통합된 토큰 응답 생성 메서드
+    private Map<String, Object> createTokenResponseData(TokenDTO tokens) {
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("accessToken", tokens.accessToken());
+        responseData.put("refreshToken", tokens.refreshToken());
+        responseData.put("expiresIn", tokens.expiresIn());
+        return responseData;
+    }
+
+    private Map<String, Object> createTokenAndUserResponse(TokenDTO tokens, PetUser user) {
+        Map<String, Object> responseData = createTokenResponseData(tokens);
+        responseData.put("user", authHelper.createUserDataMap(user));
+        return responseData;
     }
 
     private boolean checkNicknameAvailability(String nickname) {
@@ -72,15 +87,6 @@ public class AuthController {
 
     private TokenDTO generateTokenPair(PetUser user) {
         return jwtUtil.generateTokenPair(user);
-    }
-
-    private Map<String, Object> createRegistrationResponse(TokenDTO tokens, PetUser user) {
-        Map<String, Object> responseData = new HashMap<>();
-        responseData.put("accessToken", tokens.accessToken());
-        responseData.put("refreshToken", tokens.refreshToken());
-        responseData.put("expiresIn", tokens.expiresIn());
-        responseData.put("user", authHelper.createUserDataMap(user));
-        return responseData;
     }
 
     private String decodeOAuthData(String encodedData) {
@@ -125,9 +131,7 @@ public class AuthController {
     }
 
     private PetUser findAndValidateUser(UUID userId) {
-        PetUser user = userRepository.findById(userId)
-                .orElseThrow(() -> new CustomException("존재하지 않는 사용자입니다.", HttpStatus.NOT_FOUND));
-
+        PetUser user = commonUserService.findUserByIdOrThrow(userId);
         validateUserStatus(user);
         return user;
     }
@@ -172,14 +176,6 @@ public class AuthController {
         }
     }
 
-    private Map<String, Object> createTokenResponse(TokenDTO tokenDTO) {
-        Map<String, Object> responseData = new HashMap<>();
-        responseData.put("accessToken", tokenDTO.accessToken());
-        responseData.put("refreshToken", tokenDTO.refreshToken());
-        responseData.put("expiresIn", tokenDTO.expiresIn());
-        return responseData;
-    }
-
     // Private helper methods
     private PetUser findOrCreateUser(OAuthTempTokenDTO tempTokenInfo, UserRegistrationDTO registrationDTO) {
         // 소셜 ID로 이미 존재하는 사용자 확인
@@ -220,8 +216,8 @@ public class AuthController {
         try {
             authHelper.validateAuthentication();
 
-            UUID userId = authHelper.getCurrentUserUUID(request);
-            PetUser user = findUserById(userId);
+            UUID userId = tokenUtils.getCurrentUserUUID(request);
+            PetUser user = commonUserService.findUserByIdOrThrow(userId);
 
             Map<String, Object> userData = authHelper.createUserDataMap(user);
 
@@ -229,7 +225,7 @@ public class AuthController {
         } catch (CustomException e) {
             return responseService.createErrorResponse(e.getHttpStatus().name(), e.getMessage());
         } catch (Exception e) {
-            return handleGenericError(e, "사용자 정보 조회");
+            return handleUnexpectedError(e, "사용자 정보 조회");
         }
     }
 
@@ -241,13 +237,13 @@ public class AuthController {
             petUser = saveUser(petUser);
 
             TokenDTO tokens = generateTokenPair(petUser);
-            Map<String, Object> responseData = createRegistrationResponse(tokens, petUser);
+            Map<String, Object> responseData = createTokenAndUserResponse(tokens, petUser);
 
             return responseService.createSuccessResponse(responseData, "사용자 등록이 완료되었습니다.");
         } catch (CustomException e) {
             return responseService.createErrorResponse(e.getHttpStatus().name(), e.getMessage());
         } catch (Exception e) {
-            return handleGenericError(e, "사용자 등록");
+            return handleUnexpectedError(e, "사용자 등록");
         }
     }
 
@@ -260,7 +256,7 @@ public class AuthController {
 
             return responseService.createSuccessResponse(responseData, message);
         } catch (Exception e) {
-            return handleGenericError(e, "닉네임 확인");
+            return handleUnexpectedError(e, "닉네임 확인");
         }
     }
 
@@ -269,7 +265,7 @@ public class AuthController {
         try {
             String refreshToken = validateRefreshToken(request.refreshToken());
             TokenDTO tokenDTO = performTokenRefresh(refreshToken);
-            Map<String, Object> responseData = createTokenResponse(tokenDTO);
+            Map<String, Object> responseData = createTokenResponseData(tokenDTO);
 
             return responseService.createSuccessResponse(responseData, "토큰이 갱신되었습니다.");
         } catch (CustomException e) {
@@ -307,7 +303,7 @@ public class AuthController {
     @PostMapping("/withdraw")
     public ResponseEntity<?> withdrawUser(HttpServletRequest request) {
         try {
-            UUID userId = authHelper.getCurrentUserUUID(request);
+            UUID userId = tokenUtils.getCurrentUserUUID(request);
 
             // 사용자 탈퇴 처리 서비스 호출
             boolean withdrawn = userService.withdrawUser(userId);
@@ -331,7 +327,7 @@ public class AuthController {
     @PutMapping("/profile")
     public ResponseEntity<?> updateProfile(HttpServletRequest request, @RequestBody ProfileUpdateDTO profileUpdateDTO) {
         try {
-            UUID userId = authHelper.getCurrentUserUUID(request);
+            UUID userId = tokenUtils.getCurrentUserUUID(request);
 
             // 닉네임 중복 확인
             if (profileUpdateDTO.nickname() != null && !profileUpdateDTO.nickname().isBlank()) {
@@ -364,7 +360,7 @@ public class AuthController {
     @GetMapping("/token/validate")
     public ResponseEntity<?> validateToken(HttpServletRequest request) {
         try {
-            String token = authHelper.extractJwtToken(request);
+            String token = tokenUtils.extractJwtToken(request);
 
             if (token == null) {
                 throw new CustomException("토큰을 찾을 수 없습니다.", HttpStatus.BAD_REQUEST);

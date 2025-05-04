@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.lucky0111.pettalk.domain.dto.user.ProfileUpdateDTO;
 import org.lucky0111.pettalk.domain.entity.user.PetUser;
 import org.lucky0111.pettalk.repository.user.PetUserRepository;
+import org.lucky0111.pettalk.util.auth.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -17,10 +18,11 @@ import java.util.UUID;
 public class UserServiceImpl implements UserService {
 
     private final PetUserRepository userRepository;
+    private final CommonUserService commonUserService;
 
     @Transactional
     public boolean withdrawUser(UUID userId) {
-        Optional<PetUser> userOptional = findUserById(userId);
+        Optional<PetUser> userOptional = commonUserService.findUserById(userId);
 
         if (userOptional.isPresent()) {
             PetUser user = userOptional.get();
@@ -56,7 +58,7 @@ public class UserServiceImpl implements UserService {
 
     @Transactional
     public PetUser updateProfile(UUID userId, ProfileUpdateDTO profileUpdateDTO) {
-        Optional<PetUser> userOptional = findUserById(userId);
+        Optional<PetUser> userOptional = commonUserService.findUserById(userId);
 
         if (userOptional.isPresent()) {
             PetUser user = userOptional.get();
@@ -65,13 +67,6 @@ public class UserServiceImpl implements UserService {
         }
 
         return null;
-    }
-
-    /**
-     * 사용자 ID로 사용자 조회
-     */
-    private Optional<PetUser> findUserById(UUID userId) {
-        return userRepository.findById(userId);
     }
 
     /**
@@ -93,7 +88,7 @@ public class UserServiceImpl implements UserService {
      * 닉네임이 존재하면 업데이트
      */
     private void updateNicknameIfPresent(PetUser user, String nickname) {
-        if (isNotBlank(nickname)) {
+        if (StringUtils.isNotEmpty(nickname)) {
             user.setNickname(nickname);
         }
     }
@@ -102,15 +97,8 @@ public class UserServiceImpl implements UserService {
      * 프로필 이미지 URL이 존재하면 업데이트
      */
     private void updateProfileImageUrlIfPresent(PetUser user, String profileImageUrl) {
-        if (isNotBlank(profileImageUrl)) {
+        if (StringUtils.isNotEmpty(profileImageUrl)) {
             user.setProfileImageUrl(profileImageUrl);
         }
-    }
-
-    /**
-     * 문자열이 비어있지 않은지 확인
-     */
-    private boolean isNotBlank(String str) {
-        return str != null && !str.isBlank();
     }
 }
