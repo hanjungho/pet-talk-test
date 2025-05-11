@@ -4,15 +4,13 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.security.SecurityScheme;
-import jakarta.servlet.http.HttpServletRequest;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lucky0111.pettalk.domain.common.PetCategory;
 import org.lucky0111.pettalk.domain.common.PostCategory;
-import org.lucky0111.pettalk.domain.dto.community.PostLikeResponseDTO;
-import org.lucky0111.pettalk.domain.dto.community.PostRequestDTO;
-import org.lucky0111.pettalk.domain.dto.community.PostResponseDTO;
-import org.lucky0111.pettalk.domain.dto.community.PostUpdateDTO;
+import org.lucky0111.pettalk.domain.common.SortType;
+import org.lucky0111.pettalk.domain.dto.community.*;
 import org.lucky0111.pettalk.service.community.PostService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -31,6 +29,7 @@ import java.util.List;
         bearerFormat = "JWT",
         description = "JWT Bearer token"
 )
+@Tag(name = "게시물 API", description = "게시물 관련 API 엔드포인트")
 public class PostController {
 
     private final PostService postService;
@@ -38,15 +37,50 @@ public class PostController {
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "게시물 목록 조회", description = "게시물 목록을 페이지 단위로 조회합니다.")
     @GetMapping
-    public ResponseEntity<List<PostResponseDTO>> getAllPosts(
+    public ResponseEntity<PostPageDTO> getAllPosts(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(required = false) PostCategory postCategory,
             @RequestParam(required = false) PetCategory petCategory,
-            HttpServletRequest request) {
+            @RequestParam(defaultValue = "LATEST") SortType sortType) {
         log.info("게시물 목록 조회 요청: page={}, postCategoryId={}, petCategoryId={}",
                 page, postCategory, petCategory);
 
-        List<PostResponseDTO> posts = postService.getAllPosts(page, postCategory, petCategory);
+        PostPageDTO posts = postService.getAllPosts(page, postCategory, petCategory, sortType);
+        return ResponseEntity.ok(posts);
+    }
+
+    @Operation(summary = "게시물 검색", description = "게시물 목록을 키워드로 검색합니다.")
+    @GetMapping("/search")
+    public ResponseEntity<PostPageDTO> searchPosts(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) PostCategory postCategory,
+            @RequestParam(required = false) PetCategory petCategory,
+            @RequestParam(defaultValue = "LATEST") SortType sortType) {
+
+        PostPageDTO posts = postService.searchPosts(
+                keyword, page, postCategory, petCategory, sortType);
+
+        return ResponseEntity.ok(posts);
+    }
+
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "게시물 작성 목록 조회", description = "작선한 게시물 목록을 조회합니다.")
+    @GetMapping("/users/me")
+    public ResponseEntity<List<PostResponseDTO>> getMyPosts() {
+        log.info("게시물 작성 목록 조회 요청");
+
+        List<PostResponseDTO> posts = postService.getMyPosts();
+        return ResponseEntity.ok(posts);
+    }
+
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "좋아요 게시물 목록 조회", description = "좋아요 게시물 목록을 조회합니다.")
+    @GetMapping("/users/liked")
+    public ResponseEntity<List<PostResponseDTO>> getLikedPosts() {
+        log.info("좋아요 작성 목록 조회 요청");
+
+        List<PostResponseDTO> posts = postService.getLikedPosts();
         return ResponseEntity.ok(posts);
     }
 
@@ -105,6 +139,4 @@ public class PostController {
         PostLikeResponseDTO response = postService.toggleLike(postId);
         return ResponseEntity.ok(response);
     }
-
-
 }

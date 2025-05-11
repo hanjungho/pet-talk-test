@@ -10,6 +10,7 @@ import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.service.AiServices;
+import org.lucky0111.pettalk.assistants.McpTagAssistant;
 import org.lucky0111.pettalk.assistants.McpUserAssistant;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -86,9 +87,20 @@ public class McpAssistantConfig {
 
     @Bean
     public McpUserAssistant mcpUserAssistant(ChatLanguageModel chatLanguageModel,
-                                          ChatMemory chatMemory) {
+                                             McpToolProvider toolProvider, ChatMemory chatMemory) {
         return AiServices.builder(McpUserAssistant.class)
                 .chatLanguageModel(chatLanguageModel)
+                .toolProvider(toolProvider)
+                .chatMemory(chatMemory)
+                .build();
+    }
+
+    @Bean
+    public McpTagAssistant mcpTagAssistant(ChatLanguageModel chatLanguageModel,
+                                            McpToolProvider toolProvider, ChatMemory chatMemory) {
+        return AiServices.builder(McpTagAssistant.class)
+                .chatLanguageModel(chatLanguageModel)
+                .toolProvider(toolProvider)
                 .chatMemory(chatMemory)
                 .build();
     }

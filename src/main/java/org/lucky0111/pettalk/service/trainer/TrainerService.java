@@ -1,7 +1,12 @@
 package org.lucky0111.pettalk.service.trainer;
 
-import org.lucky0111.pettalk.domain.dto.trainer.TrainerApplicationRequestDTO;
+import jakarta.validation.Valid;
+import org.lucky0111.pettalk.domain.common.TrainerSearchType;
+import org.lucky0111.pettalk.domain.common.TrainerSortType;
+import org.lucky0111.pettalk.domain.dto.trainer.CertificationRequestDTO;
 import org.lucky0111.pettalk.domain.dto.trainer.TrainerDTO;
+import org.lucky0111.pettalk.domain.dto.trainer.TrainerPageDTO;
+import org.lucky0111.pettalk.domain.dto.trainer.TrainerProfileUpdateDTO;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -9,11 +14,15 @@ import java.util.List;
 import java.util.UUID;
 
 public interface TrainerService {
-    TrainerDTO getTrainerDetails(UUID trainerId);
+    TrainerDTO getTrainerDetails(String trainerNickname);
 
-    // 사용자 ID, 신청 정보, 자격증 파일 목록을 받아 훈련사 신청 처리
-    void applyTrainer(UUID userId, TrainerApplicationRequestDTO applicationReq, List<MultipartFile> certificationFiles);
-    // 신청제출 결과에 대한 정보만 -> 반환값없음
-    // 승인은 추후에 이뤄지는 비동기적인 처리
+    TrainerPageDTO searchTrainers(String keyword, TrainerSearchType searchType, int page, int size, TrainerSortType sortType);
 
+    void applyTrainer(UUID userId, CertificationRequestDTO certificationDTO, MultipartFile certificationFile);
+
+    void addCertification(UUID trainerId, CertificationRequestDTO certificationDTO, MultipartFile certificationFile);
+
+    TrainerPageDTO getAllTrainers(int page, int size, TrainerSortType sortType);
+
+    void updateTrainerProfile(UUID authenticatedUserId, UUID trainerId, TrainerProfileUpdateDTO updateDTO, List<MultipartFile> photos);
 }

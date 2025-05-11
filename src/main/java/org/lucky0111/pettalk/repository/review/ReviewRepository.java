@@ -6,9 +6,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 public interface ReviewRepository extends JpaRepository<Review, Long> {
     boolean existsByUserApply(UserApply userApply);
@@ -27,35 +29,52 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
             "JOIN FETCH ua.petUser " +
             "JOIN FETCH ua.trainer t " +
             "JOIN FETCH t.user " +
-            "WHERE t.trainerId = :trainerId")
-    List<Review> findByTrainerIdWithRelations(UUID trainerId);
+            "WHERE r.reviewId IN :reviewIds")
+    List<Review> findAllByIdWithRelations(@Param("reviewIds") List<Long> reviewIds);
 
-    // 사용자별 리뷰 조회 최적화
-    @Query("SELECT r FROM Review r " +
-            "JOIN FETCH r.userApply ua " +
-            "JOIN FETCH ua.petUser pu " +
-            "JOIN FETCH ua.trainer t " +
-            "JOIN FETCH t.user " +
-            "WHERE pu.userId = :userId")
-    List<Review> findByUserIdWithRelations(UUID userId);
-
-    @Query("SELECT r FROM Review r " +
-            "JOIN FETCH r.userApply ua " +
-            "JOIN FETCH ua.petUser " +
-            "JOIN FETCH ua.trainer t " +
-            "JOIN FETCH t.user " +
-            "WHERE r.reviewId = :reviewId")
-    Optional<Review> findByIdWithRelations(@Param("reviewId") Long reviewId);
-
-    // 특정 Trainer의 평균 평점을 조회하는 쿼리 (관계 필드 조인 사용)
-    // Review(r) 엔티티의 userApply 관계 필드를 타고 UserApply(ua) 엔티티 조인
-    // UserApply(ua) 엔티티의 trainer 관계 필드를 타고 Trainer(t) 엔티티 조인 ( Trainer 엔티티의 PK 필드는 trainerId 임)
     @Query("SELECT AVG(r.rating) FROM Review r JOIN r.userApply ua JOIN ua.trainer t WHERE t.trainerId = :trainerId")
     Double findAverageRatingByTrainerId(@Param("trainerId") UUID trainerId);
 
-    // 특정 Trainer의 후기(Review) 개수를 조회하는 쿼리 (관계 필드 조인 사용)
-    // 위와 동일하게 관계 필드를 타고 조인
     @Query("SELECT COUNT(r) FROM Review r JOIN r.userApply ua JOIN ua.trainer t WHERE t.trainerId = :trainerId")
     Long countByReviewedTrainerId(@Param("trainerId") UUID trainerId);
 
+    @Query("SELECT ua.trainer.trainerId as trainerId, AVG(r.rating) as avgRating " +
+            "FROM Review r JOIN r.userApply ua " +
+            "WHERE ua.trainer.trainerId IN :trainerIds " +
+            "GROUP BY ua.trainer.trainerId")
+    List<TrainerRatingProjection> findAverageRatingsByTrainerIdsRaw(Collection<UUID> trainerIds);
+
+    default Map<UUID, Double> findAverageRatingsByTrainerIds(Collection<UUID> trainerIds) {
+        return findAverageRatingsByTrainerIdsRaw(trainerIds).stream()
+                .collect(Collectors.toMap(
+                        TrainerRatingProjection::getTrainerId,
+                        projection -> projection.getAvgRating() != null ? projection.getAvgRating() : 0.0
+                ));
+    }
+
+    @Query("SELECT ua.trainer.trainerId as trainerId, COUNT(r) as reviewCount " +
+            "FROM Review r JOIN r.userApply ua " +
+            "WHERE ua.trainer.trainerId IN :trainerIds " +
+            "GROUP BY ua.trainer.trainerId")
+    List<TrainerReviewCountProjection> findReviewCountsByTrainerIdsRaw(Collection<UUID> trainerIds);
+
+    default Map<UUID, Long> countReviewsByTrainerIds(Collection<UUID> trainerIds) {
+        return findReviewCountsByTrainerIdsRaw(trainerIds).stream()
+                .collect(Collectors.toMap(
+                        TrainerReviewCountProjection::getTrainerId,
+                        TrainerReviewCountProjection::getReviewCount
+                ));
+    }
+
+    Review findByUserApply_ApplyId(Long applyId);
+
+    interface TrainerRatingProjection {
+        UUID getTrainerId();
+        Double getAvgRating();
+    }
+
+    interface TrainerReviewCountProjection {
+        UUID getTrainerId();
+        Long getReviewCount();
+    }
 }
